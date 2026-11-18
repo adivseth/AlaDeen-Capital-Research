@@ -1,0 +1,22 @@
+AlaDeen Capital Research
+Copyright 2026 AlaDeen Capital Research contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Methodology
+-----------
+The council review follows Andrej Karpathy's "LLM Council" approach (independent advisors,
+anonymous peer review, chairman synthesis).
+
+The methodology notes in aladeen/knowledge/ are original summaries and adaptations, for the
+Indian market, of frameworks described in:
+  - Aswath Damodaran, Investment Valuation (2nd ed.)
+  - Benjamin Graham, The Intelligent Investor (revised ed.)
+  - Benjamin Graham and David Dodd, Security Analysis (6th ed.)
+
+Data
+----
+The software fetches data at run time from third-party websites (Screener.in, Yahoo Finance,
+BSE, Google News). No third-party data is redistributed in this repository except small test
+fixtures captured from public pages for parser tests (tests/fixtures/). Users are responsible
+for complying with each data source's terms of use.

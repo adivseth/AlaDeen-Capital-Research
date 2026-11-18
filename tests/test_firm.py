@@ -1,0 +1,151 @@
+"""End-to-end: synthetic data + scripted agents through the real CIO-led research process."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from aladeen.demo import DEMO_DATE, demo_responder, demo_runner, synthetic_factpack
+from aladeen.firm.events import EventLog
+from aladeen.firm.orchestrator import ResearchRun
+from aladeen.firm.prompts import ROLES, system_for
+from aladeen.firm.roster import PHASES, ROSTER
+from aladeen.firm.schemas import DeskReviewSet, FinalCall
+from aladeen.llm import OfflineRunner
+
+
+def _run(cfg, tmp_path, runner=None, events=None):
+    runner = runner or demo_runner()
+    ev = events or EventLog()
+    state = ResearchRun(cfg, "DEMO", DEMO_DATE, runner=runner, events=ev,
+                        factpack_loader=lambda t, d: synthetic_factpack(d), out_dir=tmp_path / "out").run()
+    return state, runner, ev
+
+
+def test_full_research(cfg, tmp_path):
+    state, runner, _ = _run(cfg, tmp_path)
+    names = [c["agent"] for c in runner.calls]
+    for a in ("cio_mandate", "cio_review", "cio_debate", "cio_decision"):  # the CIO leads every stage
+        assert a in names
+    for desk in ("fundamentals", "business", "governance", "technical", "news", "filings"):
+        assert desk in names
+    for a in ("valuation", "risk", "council_chair"):
+        assert a in names
+    assert "technical_rev" in names  # the demo CIO sends the technical memo back once
+    assert [r["desk"] for r in state["revisions"]] == ["technical"]
+    assert [d["side"] for d in state["debate"]] == ["bull", "bear", "bull", "bear"]
+    assert state["final"]["rating"] == state["valuation"]["band_rating"]
+    assert state["council"]["verdict"]["verdict"] in ("INVEST", "DO NOT INVEST", "WAIT")
+    html = Path(state["paths"]["report"]).read_text(encoding="utf-8")
+    for s in ("SECTION 01", "SECTION 09", "SECTION 13", "APPENDIX A4", "Kill fact", "CIO ruling",
+              "Independent council review", "AlaDeen Capital Research"):
+        assert s in html, s
+    assert html.count("<section") == html.count("</section>")
+    assert json.loads(Path(state["paths"]["research"]).read_text())["final"]["rating"] == state["final"]["rating"]
+    assert "call_id" not in state  # synthetic runs are never logged
+
+
+def test_event_stream_drives_the_office(cfg, tmp_path):
+    _, _, ev = _run(cfg, tmp_path)
+    events = ev.all()
+    assert [e["seq"] for e in events] == list(range(len(events)))
+    assert events[-1]["type"] == "done" and ev.closed
+    assert {e["phase"] for e in events if e["type"] == "phase"} == {p["id"] for p in PHASES}
+    agents = {a["id"] for a in ROSTER}
+    for e in events:
+        if e["type"] in ("agent", "message", "log"):
+            assert e["agent"] in agents, e
+        if e["type"] == "message":
+            assert e["to"] in agents and e["text"]
+    briefed = {e["to"] for e in events if e["type"] == "message" and e["agent"] == "cio"}
+    assert {"fundamentals", "business", "governance", "filings", "news", "technical"} <= briefed
+
+
+def test_rating_forced_to_bands(cfg, tmp_path):
+    def contrarian(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is FinalCall:
+            out = out.model_copy(update={"rating": "BUY" if out.rating != "BUY" else "SELL"})
+        return out
+
+    state, _, _ = _run(cfg, tmp_path, OfflineRunner(contrarian))
+    assert state["final"]["rating"] == state["valuation"]["band_rating"]
+    assert state["rating_check"]["consistent"] is False and state["rating_check"]["note"]
+
+
+def test_no_revision_rounds_means_no_send_backs(cfg, tmp_path):
+    cfg["cio_revision_rounds"] = 0
+    state, runner, _ = _run(cfg, tmp_path)
+    assert not [c for c in runner.calls if c["agent"].endswith("_rev")]
+    assert state["revisions"] == []
+
+
+def test_cio_accepting_everything_skips_revisions(cfg, tmp_path):
+    def happy(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            out = out.model_copy(update={"reviews": [r.model_copy(update={"verdict": "accept"}) for r in out.reviews]})
+        return out
+
+    state, _, _ = _run(cfg, tmp_path, OfflineRunner(happy))
+    assert state["revisions"] == []
+
+
+def test_no_council_and_more_rounds(cfg, tmp_path):
+    cfg["run_council"] = False
+    cfg["max_debate_rounds"] = 2
+    state, _, ev = _run(cfg, tmp_path)
+    assert "council" not in state
+    assert len(state["debate"]) == 6
+    assert "council" not in {e.get("phase") for e in ev.all() if e["type"] == "phase"}
+
+
+def test_desk_selection(cfg, tmp_path):
+    cfg["desks"] = ["fundamentals", "news"]
+    state, runner, _ = _run(cfg, tmp_path)
+    names = {c["agent"] for c in runner.calls}
+    assert {"fundamentals", "news"} <= names
+    assert not {"business", "governance", "technical", "filings"} & names
+    assert set(state["memos"]) == {"fundamentals", "news"}
+
+
+def test_valuation_analyst_failure_falls_back_and_is_disclosed(cfg, tmp_path):
+    def broken(name, schema, system, user):
+        if name == "valuation":
+            raise RuntimeError("model unavailable")
+        return demo_responder(name, schema, system, user)
+
+    state, _, _ = _run(cfg, tmp_path, OfflineRunner(broken))
+    assert any("model unavailable" in e for e in state["errors"])
+    assert state["final"]["rating"] == state["valuation"]["band_rating"]
+
+
+def test_failure_emits_error_event(cfg, tmp_path):
+    def broken(name, schema, system, user):
+        if name == "cio_decision":
+            raise RuntimeError("model unavailable")
+        return demo_responder(name, schema, system, user)
+
+    ev = EventLog()
+    with pytest.raises(RuntimeError):
+        _run(cfg, tmp_path, OfflineRunner(broken), ev)
+    assert ev.all()[-1]["type"] == "error" and "model unavailable" in ev.all()[-1]["text"]
+
+
+def test_missing_api_key_fails_before_data_work(cfg, tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    cfg["api_keys"] = {}
+    called = []
+    ev = EventLog()
+    with pytest.raises(RuntimeError, match="Settings"):
+        ResearchRun(cfg, "DEMO", DEMO_DATE, events=ev, out_dir=tmp_path / "out",
+                    factpack_loader=lambda t, d: called.append(t) or synthetic_factpack(d)).run()
+    assert called == []
+    assert ev.all()[-1]["type"] == "error"
+
+
+def test_prompts_contain_house_rules(cfg):
+    for agent in ROLES:
+        kw = {"advisor": "The Contrarian"} if agent == "council_advisor" else {}
+        text = system_for(agent, cfg, **kw)
+        assert "Do not introduce new numbers" in text

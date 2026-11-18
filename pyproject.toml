@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aladeen-capital-research"
+dynamic = ["version"]
+description = "AlaDeen Capital Research: an AI research firm for Indian listed companies (NSE/BSE). A CIO agent leads a team of research desks; watch them work in a local browser dashboard and get an institutional-grade HTML/PDF report."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+authors = [{ name = "AlaDeen Capital Research contributors" }]
+keywords = ["equity research", "india", "nse", "bse", "llm", "agents", "valuation", "dcf"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+dependencies = [
+    "langchain-core>=0.3",
+    "langchain-anthropic>=0.3",
+    "langchain-openai>=0.3",
+    "langchain-google-genai>=2.0",
+    "pydantic>=2.6",
+    "yfinance>=0.2.50",
+    "pandas>=2.1",
+    "numpy>=1.26",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "pypdf>=4.0",
+    "matplotlib>=3.8",
+    "pillow>=10.0",
+    "jinja2>=3.1",
+    "markdown-it-py>=3.0",
+    "typer>=0.12",
+    "rich>=13.0",
+    "python-dotenv>=1.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+sheets = ["gspread>=6.0"]
+dev = ["pytest>=8.0", "ruff>=0.6", "httpx>=0.27", "playwright>=1.40"]
+
+[project.scripts]
+aladeen = "aladeen.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/adivseth/AlaDeen-Capital-Research"
+Issues = "https://github.com/adivseth/AlaDeen-Capital-Research/issues"
+
+[tool.setuptools.dynamic]
+version = { attr = "aladeen.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["aladeen*"]
+
+[tool.setuptools.package-data]
+aladeen = ["knowledge/*.md", "report/templates/*.j2", "web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+extend-exclude = ["results", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM"]
+ignore = ["E501", "B008", "C408", "SIM103"]

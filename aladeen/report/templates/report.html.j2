@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ fp.name }} ({{ fp.ticker }}) — Equity Research — {{ published }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --navy:#1f3b73; --blue:#2f6fdf; --teal:#0f9d8a; --orange:#f08a24; --red:#d64545; --green:#2e9d4d;
+  --purple:#7b4bc4; --ink:#1d2433; --muted:#5b6578; --line:#dfe5ef; --bg:#f5f7fb; --card:#ffffff;
+  --buy:#2e9d4d; --hold:#e0a100; --sell:#d64545;
+}
+*{box-sizing:border-box}
+html{font-size:15px}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI",Arial,sans-serif;line-height:1.55}
+.page{max-width:1120px;margin:0 auto;padding:28px 32px 60px}
+.topbar{display:flex;justify-content:space-between;align-items:center;background:var(--navy);color:#fff;
+  padding:10px 18px;border-radius:10px 10px 0 0;font-size:.82rem;letter-spacing:.04em;font-weight:600}
+.topbar .rt{background:#fff;color:var(--navy);padding:3px 10px;border-radius:999px}
+.hero{background:linear-gradient(120deg,#ffffff 0%,#eef4ff 55%,#e8fbf6 100%);border:1px solid var(--line);
+  border-top:0;border-radius:0 0 14px 14px;padding:26px 28px;display:grid;grid-template-columns:1fr 250px;gap:24px}
+.hero .id{display:flex;gap:18px;align-items:flex-start}
+.hero img.logo{width:76px;height:76px;object-fit:contain;border-radius:14px;background:#fff;border:1px solid var(--line);padding:6px}
+.kicker{font-size:.78rem;font-weight:700;color:var(--blue);letter-spacing:.08em;text-transform:uppercase}
+h1{font-family:"Source Serif 4",Georgia,serif;font-size:2.1rem;margin:4px 0 6px;color:var(--navy);line-height:1.15}
+.sub{color:var(--muted);font-size:.9rem}
+.headline{margin-top:14px;font-size:1.08rem;font-weight:600;color:var(--ink)}
+.ratingbox{border-radius:14px;padding:18px;color:#fff;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.ratingbox.buy{background:linear-gradient(160deg,#36b35a,#23864a)}
+.ratingbox.hold{background:linear-gradient(160deg,#f2b51c,#c98a00)}
+.ratingbox.sell{background:linear-gradient(160deg,#e45b5b,#b53434)}
+.ratingbox .r{font-size:2.3rem;font-weight:800;letter-spacing:.06em}
+.ratingbox .q{font-size:.8rem;opacity:.95;margin-top:-2px}
+.ratingbox .tp{font-size:1.5rem;font-weight:700;margin-top:10px}
+.ratingbox .l{font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;opacity:.9}
+.snap{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:18px 0 6px;background:var(--card);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.snap div{padding:9px 14px;border-bottom:1px solid var(--line);border-right:1px solid var(--line);font-size:.86rem}
+.snap div:nth-child(4n){border-right:0}
+.snap .k{color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;display:block}
+.snap .val{font-weight:700;color:var(--ink)}
+section.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 26px;margin-top:20px}
+h2{font-size:1.25rem;margin:0 0 14px;color:var(--navy);display:flex;align-items:center;gap:10px}
+h2 .num{background:var(--navy);color:#fff;font-size:.75rem;padding:4px 9px;border-radius:8px;letter-spacing:.05em}
+section.c1 h2 .num{background:var(--blue)} section.c2 h2 .num{background:var(--teal)}
+section.c3 h2 .num{background:var(--orange)} section.c4 h2 .num{background:var(--purple)}
+section.c5 h2 .num{background:var(--red)} section.c6 h2 .num{background:var(--green)}
+h3{font-size:1.02rem;color:var(--navy);margin:18px 0 8px}
+p{margin:0 0 10px}
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:8px 0 14px}
+th{background:#eef3fb;color:var(--navy);text-align:right;font-weight:700;padding:7px 9px;border-bottom:2px solid #cfd9ea;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{padding:6px 9px;border-bottom:1px solid var(--line);text-align:right;font-variant-numeric:tabular-nums}
+tr.b td{font-weight:700;background:#fafcff}
+tr.star td{background:#fff8e6;font-weight:700}
+td.l, th.l{text-align:left}
+.tablewrap{overflow-x:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.75rem;font-weight:700}
+.pill.High{background:#fde4e4;color:#a72d2d}.pill.Medium{background:#fff1d6;color:#9a6a00}.pill.Low{background:#e2f5e8;color:#22733c}
+.pill.ok{background:#e2f5e8;color:#22733c}.pill.bad{background:#fde4e4;color:#a72d2d}.pill.na{background:#eef1f6;color:#5b6578}
+.box{border-radius:12px;padding:14px 16px;border:1px solid var(--line);background:#fbfcfe}
+.box.bull{border-left:5px solid var(--green)} .box.bear{border-left:5px solid var(--red)}
+.box.kill{border-left:5px solid var(--purple);background:#f7f3ff}
+.box.warn{border-left:5px solid var(--orange);background:#fff8ef}
+.box.info{border-left:5px solid var(--blue);background:#f3f7ff}
+.box h4{margin:0 0 6px;font-size:.92rem;color:var(--navy)}
+.pillars li{margin-bottom:6px}
+img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 0}
+.agent{border:1px solid var(--line);border-radius:12px;padding:14px 18px;margin:12px 0;background:#fcfdff}
+.agent .who{font-weight:700;color:var(--blue);font-size:.88rem;text-transform:uppercase;letter-spacing:.05em}
+.agent table{font-size:.8rem}
+.small{font-size:.8rem;color:var(--muted)}
+.disclaimer{font-size:.78rem;color:var(--muted)}
+.demo-banner{background:#fff1d6;border:1px solid #f2c46b;color:#7a5200;padding:10px 16px;border-radius:10px;margin-bottom:14px;font-weight:600}
+.footer{margin-top:26px;font-size:.78rem;color:var(--muted);text-align:center}
+@media (max-width:820px){.hero{grid-template-columns:1fr}.snap{grid-template-columns:repeat(2,1fr)}.grid2,.grid3{grid-template-columns:1fr}}
+@media print{body{background:#fff}.page{padding:0}section.card{break-inside:avoid-page}}
+</style>
+</head>
+<body>
+<div class="page">
+{% if synthetic %}<div class="demo-banner">DEMO REPORT — synthetic company and offline agents. No real security is described and no AI model was called.</div>{% endif %}
+
+<div class="topbar">
+  <span>EQUITY RESEARCH │ {{ fp.name }} │ {{ fp.exchange }}: {{ fp.ticker }}</span>
+  <span class="rt">{{ rating }} │ TP {{ v.target_price|inr }} │ Upside {{ v.upside|pct }}</span>
+</div>
+<div class="hero">
+  <div>
+    <div class="id">
+      {% if company.logo %}<img class="logo" src="{{ company.logo }}" alt="{{ fp.name }} logo">{% endif %}
+      <div>
+        <div class="kicker">Equity research report · {{ sector }}</div>
+        <h1>{{ fp.name }}</h1>
+        <div class="sub">{{ fp.exchange }}: {{ fp.ticker }}{% if company.bse_code %} · BSE: {{ company.bse_code }}{% endif %} · {{ industry }} · {% if prior_calls %}Coverage update{% else %}Initiating coverage{% endif %} · 12-month horizon</div>
+      </div>
+    </div>
+    <div class="headline">{{ final.headline }}</div>
+  </div>
+  <div class="ratingbox {{ rating_class }}">
+    <div class="l">Rating</div>
+    <div class="r">{{ rating }}</div>
+    {% if final.qualifier %}<div class="q">{{ final.qualifier }}</div>{% endif %}
+    <div class="tp">{{ v.target_price|inr }}</div>
+    <div class="l">12-month target price</div>
+  </div>
+</div>
+
+<div class="snap">
+  <div><span class="k">CMP</span><span class="val">{{ mk.cmp|inr }}</span></div>
+  <div><span class="k">Market cap</span><span class="val">₹{{ mk.market_cap_cr|num }} Cr</span></div>
+  <div><span class="k">Upside / total return</span><span class="val">{{ v.upside|pct }} / {{ v.total_return|pct }}</span></div>
+  <div><span class="k">52W high / low</span><span class="val">{{ mk.high_52w|inr(0) }} / {{ mk.low_52w|inr(0) }}</span></div>
+  <div><span class="k">P/E (TTM, Screener)</span><span class="val">{{ mk.pe_screener|x }}</span></div>
+  <div><span class="k">Price / book</span><span class="val">{% if mk.book_value_screener %}{{ (mk.cmp / mk.book_value_screener)|x }}{% else %}—{% endif %}</span></div>
+  <div><span class="k">Avg daily volume (3M)</span><span class="val">{% if mk.avg_volume_3m %}{{ (mk.avg_volume_3m/100000)|num(2) }} L shares{% else %}—{% endif %}</span></div>
+  <div><span class="k">Dividend yield</span><span class="val">{{ mk.dividend_yield|pct(2) }}</span></div>
+  <div><span class="k">Promoter holding</span><span class="val">{{ latest_sh.get('Promoters')|pctv(2) }}</span></div>
+  <div><span class="k">FII / DII</span><span class="val">{{ latest_sh.get('FIIs')|pctv(1) }} / {{ latest_sh.get('DIIs')|pctv(1) }}</span></div>
+  <div><span class="k">Shares outstanding</span><span class="val">{{ mk.shares_cr|num(2) }} Cr</span></div>
+  <div><span class="k">Face value</span><span class="val">{{ mk.face_value|inr(0) }}</span></div>
+  <div><span class="k">Beta (2Y weekly)</span><span class="val">{{ mk.beta_raw|num(2) }}</span></div>
+  <div><span class="k">Index membership</span><span class="val">{{ (company.indices[:2]|join(', ')) or '—' }}</span></div>
+  <div><span class="k">Analyst</span><span class="val">{{ cfg.analyst_name }}</span></div>
+  <div><span class="k">Published</span><span class="val">{{ published }}</span></div>
+</div>
+
+<!-- 01 -->
+<section class="card c1">
+  <h2><span class="num">SECTION 01</span> Investment thesis</h2>
+  <div class="grid2">
+    <div>{{ final.executive_summary|md|safe }}</div>
+    <div>
+      <div class="box info"><h4>Three pillars of the thesis</h4>
+        <ol class="pillars">{% for p in final.thesis_pillars %}<li>{{ p }}</li>{% endfor %}</ol></div>
+      <div class="box kill" style="margin-top:12px"><h4>Kill fact — what would overturn this call</h4>{{ final.kill_fact }}</div>
+      <div class="box" style="margin-top:12px"><h4>Position guidance</h4>
+        Position size: <b>{{ final.position_size }}</b>{% if final.entry_zone_low %} · Entry zone: <b>{{ final.entry_zone_low|inr(0) }} – {{ final.entry_zone_high|inr(0) }}</b>{% endif %}<br>
+        Entry price for a {{ (cfg.margin_of_safety*100)|round|int }}% margin of safety: <b>{{ v.entry_price_for_mos|inr(0) }}</b></div>
+    </div>
+  </div>
+  {% if prior_calls %}<div class="box warn"><h4>Prior calls on this company</h4>
+    {% for r in prior_calls %}<div>{{ r.call_id }} · {{ r.call_date }} · {{ r.rating }} · TP ₹{{ r.target_price }} · verdict {{ r.verdict or 'not scored' }}{% if r.lesson %} · Lesson: {{ r.lesson }}{% endif %}</div>{% endfor %}</div>{% endif %}
+  {% if mandate.key_questions %}<div class="box info" style="margin-top:12px"><h4>The CIO's key questions for this mandate</h4><ol>{% for k in mandate.key_questions %}<li>{{ k }}</li>{% endfor %}</ol></div>{% endif %}
+  <h3>Key catalysts and triggers</h3>
+  <table><tr><th class="l">#</th><th class="l">Catalyst</th><th class="l">Timeline</th><th class="l">Estimated impact</th></tr>
+  {% for c in final.catalysts %}<tr><td>{{ '%02d' % loop.index }}</td><td class="l">{{ c.catalyst }}</td><td class="l">{{ c.timeline }}</td><td class="l">{{ c.impact }}</td></tr>{% endfor %}</table>
+</section>
+
+<!-- 02 -->
+<section class="card c2">
+  <h2><span class="num">SECTION 02</span> Scenario analysis, debate and final call</h2>
+  <p>The target price is the probability-weighted blend of bear, base and bull values. Each scenario value blends the intrinsic value ({{ 'DCF' if v.method == 'fcff_dcf' else 'justified P/B' }}, weight {{ (v.inputs.dcf_weight_used*100)|round|int }}%) with the peer-multiple value (weight {{ ((1 - v.inputs.dcf_weight_used)*100)|round|int }}%).</p>
+  <table><tr><th class="l">Scenario</th><th>Intrinsic</th><th>Peer multiple</th><th>Blended value</th><th>Probability</th><th class="l">Key assumptions</th></tr>
+  {% for key, label in [('bear','Bear case'),('base','Base case ★'),('bull','Bull case')] %}{% set s = v.scenarios[key] %}
+  <tr class="{{ 'star' if key == 'base' else '' }}"><td>{{ label }}</td><td>{{ s.intrinsic|inr(0) }}</td><td>{{ s.multiples|inr(0) }}</td><td><b>{{ s.value|inr(0) }}</b></td><td>{{ s.probability|pct(0) }}</td><td class="l small">{{ assumptions.get(key ~ '_case_narrative') or '—' }}</td></tr>{% endfor %}
+  <tr class="b"><td>Probability-weighted target</td><td></td><td></td><td>{{ v.target_price|inr(0) }}</td><td>100%</td><td class="l">Expected total return {{ v.total_return|pct }} (upside {{ v.upside|pct }} + dividend yield {{ v.dividend_yield|pct(2) }})</td></tr></table>
+  {% if charts.scenario %}<img class="chart" style="max-width:640px" src="{{ charts.scenario }}" alt="Scenario chart">{% endif %}
+
+  <h3>Bull vs bear debate</h3>
+  {% for d in debate %}<div class="box {{ d.side }}" style="margin-bottom:10px"><h4>{{ d.side|title }} Advocate — {{ 'opening case' if d.round == 0 else 'rebuttal' }}</h4>{{ d.text|md|safe }}</div>{% endfor %}
+  {% if decision %}<div class="grid2">
+    <div class="box bull"><h4>Bull arguments that survived</h4><ul>{% for p in decision.surviving_bull_points %}<li>{{ p }}</li>{% endfor %}</ul></div>
+    <div class="box bear"><h4>Bear arguments that survived</h4><ul>{% for p in decision.surviving_bear_points %}<li>{{ p }}</li>{% endfor %}</ul></div>
+  </div>
+  {% if decision.rejected_points %}<p class="small" style="margin-top:10px"><b>Arguments rejected:</b> {{ decision.rejected_points|join(' · ') }}</p>{% endif %}
+  <div style="margin-top:10px"><b>CIO ruling:</b> {{ decision.summary|md|safe }}</div>{% endif %}
+
+  <h3>Risk office (Chief Risk Officer)</h3>
+  {% if risk %}<div class="grid3">
+  {% for k, label in [('aggressive','Aggressive lens'),('neutral','Neutral lens'),('conservative','Conservative lens')] %}<div class="box"><h4>{{ label }}</h4>{{ risk.get(k, '—')|md|safe }}</div>{% endfor %}
+  </div>
+  <p style="margin-top:10px"><b>Risk rating:</b> {{ risk.risk_rating }} · {{ risk.recommendation }}</p>{% endif %}
+  <div class="box info" style="margin-top:12px"><h4>CIO decision</h4>
+    <b>{{ rating }}{% if final.qualifier %} ({{ final.qualifier }}){% endif %}</b> · {{ final.position_size }} position. {{ final.rating_rationale }}<br>
+    <b>Why the losing side lost:</b> {{ final.why_losing_side_lost }}
+    {% if rating_check and not rating_check.consistent %}<br><span class="pill bad">Rating aligned to bands</span> {{ rating_check.note }}{% endif %}</div>
+</section>
+
+<!-- 03 -->
+<section class="card c3">
+  <h2><span class="num">SECTION 03</span> Financial highlights at a glance</h2>
+  <div class="tablewrap"><table><tr><th class="l">₹ Cr unless stated</th>{% for c in highlights.cols %}<th>{{ c if c in highlights.model_cols else c ~ 'A' }}</th>{% endfor %}</tr>
+  {% for r in highlights.rows %}<tr class="{{ 'b' if r.bold else '' }}"><td>{{ r.label }}</td>{% for x in r['values'] %}<td>{{ x }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  {% if highlights.model_cols %}<p class="small">"E" columns are the valuation model's base case. The model forecasts revenue and operating cash flows only; it does not forecast PAT or EPS.</p>{% endif %}
+  {% if charts.financials %}<img class="chart" src="{{ charts.financials }}" alt="Financials chart">{% endif %}
+</section>
+
+<!-- 04 -->
+<section class="card c4">
+  <h2><span class="num">SECTION 04</span> Company overview, industry and filings</h2>
+  {% if memos.get("business") %}<div class="agent"><div class="who">{{ titles["business"] }}</div>{{ memos["business"]|md|safe }}</div>{% endif %}
+  {% if memos.get("filings") %}<div class="agent"><div class="who">{{ titles["filings"] }}</div>{{ memos["filings"]|md|safe }}</div>{% endif %}
+  {% if documents %}<p class="small">Documents read: {% for d in documents %}{{ d.title }} ({{ d.pages }} pages{% if d.error %}, not readable{% endif %}){{ '; ' if not loop.last }}{% endfor %}</p>{% endif %}
+</section>
+
+<!-- 05 -->
+<section class="card c5">
+  <h2><span class="num">SECTION 05</span> Management and governance</h2>
+  <p><b>Governance score:</b> <span class="pill {{ 'ok' if final.governance_score in ('Good','Satisfactory') else 'bad' }}">{{ final.governance_score }}</span></p>
+  {% if memos.get("governance") %}<div class="agent"><div class="who">{{ titles["governance"] }}</div>{{ memos["governance"]|md|safe }}</div>{% endif %}
+  {% if shareholding.rows %}<h3>Shareholding pattern (%)</h3><div class="tablewrap"><table><tr><th class="l">Holder</th>{% for c in shareholding.cols %}<th>{{ c }}</th>{% endfor %}</tr>
+  {% for r in shareholding.rows %}<tr><td>{{ r.label }}</td>{% for x in r['values'] %}<td>{{ x }}</td>{% endfor %}</tr>{% endfor %}</table></div>{% endif %}
+</section>
+
+<!-- 06-08 -->
+{% for num, title, tbl in [('06','Income statement (₹ Crores)', income), ('07','Balance sheet (₹ Crores)', balance), ('08','Cash flow statement (₹ Crores)', cashflow)] %}
+<section class="card c3">
+  <h2><span class="num">SECTION {{ num }}</span> {{ title }}</h2>
+  <div class="tablewrap"><table><tr><th class="l">Particulars</th>{% for c in tbl.cols %}<th>{{ c }}</th>{% endfor %}</tr>
+  {% for r in tbl.rows %}<tr class="{{ 'b' if r.bold else '' }}"><td>{{ r.label }}</td>{% for x in r['values'] %}<td>{{ x }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  <p class="small">Source: Screener.in ({{ 'consolidated' if fp.screener.get('consolidated') else 'standalone' }}). Figures as reported; checks in Appendix A2.</p>
+</section>
+{% endfor %}
+{% if memos.get("fundamentals") %}<section class="card c3"><h2><span class="num">ANALYSIS</span> What the financial statements say</h2><div class="agent"><div class="who">{{ titles["fundamentals"] }}</div>{{ memos["fundamentals"]|md|safe }}</div></section>{% endif %}
+
+<!-- 09 -->
+<section class="card c6">
+  <h2><span class="num">SECTION 09</span> Valuation</h2>
+  <h3>{{ 'DCF model — free cash flow to the firm' if v.method == 'fcff_dcf' else 'Justified price-to-book (financial company)' }}</h3>
+  <table><tr><th class="l">Assumption</th><th>Value</th><th class="l">Basis</th></tr>
+    <tr><td>Risk-free rate (10Y G-Sec)</td><td>{{ v.capital.risk_free|pct(2) }}</td><td class="l">Configured default (see docs/configuration.md)</td></tr>
+    <tr><td>Equity risk premium (India)</td><td>{{ v.capital.erp|pct(2) }}</td><td class="l">Damodaran-style India ERP; configurable</td></tr>
+    <tr><td>Beta</td><td>{{ v.capital.beta|num(2) }}</td><td class="l">2-year weekly vs {{ fp.benchmark }} (bounded 0.5–2.0) unless overridden</td></tr>
+    <tr><td>Cost of equity</td><td>{{ v.capital.cost_of_equity|pct(2) }}</td><td class="l">Ke = Rf + β × ERP</td></tr>
+    <tr><td>Cost of debt (pre-tax)</td><td>{{ v.capital.cost_of_debt_pre_tax|pct(2) }}</td><td class="l">Interest ÷ average borrowings, bounded</td></tr>
+    <tr><td>Debt / total capital</td><td>{{ v.capital.debt_to_capital|pct(1) }}</td><td class="l">Market values</td></tr>
+    <tr class="b"><td>WACC</td><td>{{ v.capital.wacc|pct(2) }}</td><td class="l">Ke × E/V + Kd × (1 − t) × D/V</td></tr>
+    {% if v.dcf %}<tr><td>Terminal growth</td><td>{{ v.inputs.dcf.terminal_growth|pct(1) }}</td><td class="l">Capped at {{ cfg.terminal_growth_cap|pct(1) }} (nominal GDP proxy)</td></tr>
+    <tr><td>Stable-phase return on capital</td><td>{{ v.inputs.dcf.stable_roc|pct(1) }}</td><td class="l">Terminal reinvestment = g ÷ ROC = {{ v.dcf.terminal_reinvestment_rate|pct(1) }}</td></tr>{% endif %}
+  </table>
+  {% if v.dcf %}
+  <h3>Base-case projections (₹ Cr)</h3>
+  <div class="tablewrap"><table><tr><th class="l">Year</th>{% for p in v.dcf.projections %}<th>Y{{ p.year }}</th>{% endfor %}</tr>
+    <tr><td>Revenue</td>{% for p in v.dcf.projections %}<td>{{ p.revenue|num }}</td>{% endfor %}</tr>
+    <tr><td>Growth</td>{% for p in v.dcf.projections %}<td>{{ p.growth|pct }}</td>{% endfor %}</tr>
+    <tr><td>EBIT margin</td>{% for p in v.dcf.projections %}<td>{{ p.ebit_margin|pct }}</td>{% endfor %}</tr>
+    <tr><td>NOPAT</td>{% for p in v.dcf.projections %}<td>{{ p.nopat|num }}</td>{% endfor %}</tr>
+    <tr><td>+ D&amp;A − capex − ΔNWC</td>{% for p in v.dcf.projections %}<td>{{ (p.da - p.capex - p.delta_nwc)|num }}</td>{% endfor %}</tr>
+    <tr class="b"><td>FCFF</td>{% for p in v.dcf.projections %}<td>{{ p.fcff|num }}</td>{% endfor %}</tr>
+    <tr><td>PV of FCFF</td>{% for p in v.dcf.projections %}<td>{{ p.pv_fcff|num }}</td>{% endfor %}</tr></table></div>
+  <div class="grid2"><div>
+  <table><tr><th class="l">DCF output</th><th>₹ Cr</th></tr>
+    <tr><td>PV of explicit FCFF</td><td>{{ v.dcf.pv_explicit|num }}</td></tr>
+    <tr><td>Terminal value</td><td>{{ v.dcf.terminal_value|num }}</td></tr>
+    <tr><td>PV of terminal value ({{ v.dcf.tv_share_of_ev|pct(0) }} of EV)</td><td>{{ v.dcf.pv_terminal|num }}</td></tr>
+    <tr class="b"><td>Enterprise value</td><td>{{ v.dcf.enterprise_value|num }}</td></tr>
+    <tr><td>Less: net debt (negative = net cash)</td><td>{{ v.dcf.net_debt|num }}</td></tr>
+    <tr><td>Less: minority interest</td><td>{{ v.dcf.minority_interest|num }}</td></tr>
+    <tr class="b"><td>Equity value</td><td>{{ v.dcf.equity_value|num }}</td></tr>
+    <tr><td>Shares outstanding (Cr)</td><td>{{ v.dcf.shares_cr|num(2) }}</td></tr>
+    <tr class="star"><td>DCF value per share</td><td>{{ v.dcf.per_share|inr }}</td></tr></table>
+  </div><div>
+  {% if sens %}<table><tr><th class="l">TGR ↓ / WACC →</th>{% for w in sens.wacc %}<th>{{ w|pct(1) }}</th>{% endfor %}</tr>
+    {% for g in sens.terminal_growth %}{% set gi = loop.index0 %}<tr class="{{ 'star' if gi == 2 else '' }}"><td>{{ g|pct(1) }}</td>{% for val in sens['values'][gi] %}<td>{{ val|inr(0) if val else 'n/m' }}</td>{% endfor %}</tr>{% endfor %}</table>
+  <p class="small">Sensitivity of DCF value per share to WACC and terminal growth. ★ row = base terminal growth; middle column = base WACC.</p>{% endif %}
+  </div></div>
+  {% endif %}
+  {% if v.justified_pb %}<table><tr><th class="l">Justified P/B</th><th>Value</th></tr>
+    <tr><td>Sustainable ROE</td><td>{{ v.justified_pb.roe|pct }}</td></tr><tr><td>Long-term growth</td><td>{{ v.justified_pb.growth|pct }}</td></tr>
+    <tr><td>Cost of equity</td><td>{{ v.justified_pb.cost_of_equity|pct }}</td></tr><tr><td>Justified P/B = (ROE − g) ÷ (Ke − g)</td><td>{{ v.justified_pb.justified_pb|x(2) }}</td></tr>
+    <tr><td>Book value per share</td><td>{{ v.justified_pb.bvps|inr }}</td></tr><tr class="star"><td>Value per share</td><td>{{ v.justified_pb.per_share|inr }}</td></tr></table>{% endif %}
+  <div class="box"><h4>Valuation analyst's rationale</h4>{{ assumptions.get('rationale', '')|md|safe }}</div>
+
+  <h3>Relative valuation — peer comparison (Screener.in)</h3>
+  {% if peers %}<div class="tablewrap"><table><tr><th class="l">Company</th>{% for c in peer_cols %}<th>{{ c }}</th>{% endfor %}</tr>
+  {% for p in peers %}<tr class="{{ 'star' if p.Company.lower().startswith(fp.ticker.lower()) or fp.name.lower().startswith(p.Company.lower()) else ('b' if p.Company.startswith('Median') else '') }}"><td>{{ p.Company }}</td>{% for c in peer_cols %}<td>{{ p.get(c)|num(1) }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  <p>Peer median P/E (excluding the company, {{ v.multiples.peer_count }} peers): <b>{{ v.multiples.peer_pe_median|x }}</b> × TTM EPS {{ v.multiples.eps_ttm|inr }} = <b>{{ v.multiples.implied_price|inr(0) }}</b>.</p>
+  {% else %}<p>Peer data not available.</p>{% endif %}
+
+  <h3>Graham cross-checks</h3>
+  <div class="grid2"><div><table><tr><th class="l">Measure</th><th>₹ per share</th></tr>
+    <tr><td>Graham number √(22.5 × EPS × BVPS)</td><td>{{ v.graham.graham_number|inr(0) }}</td></tr>
+    <tr><td>Graham formula EPS × (8.5 + 2g) × 4.4 ÷ Y (g {{ v.graham.graham_growth_pct }}%, Y {{ v.graham.aaa_yield_pct|num(2) }}%)</td><td>{{ v.graham.graham_formula_value|inr(0) }}</td></tr>
+    <tr><td>Net current asset value (NCAV)</td><td>{{ v.graham.ncav_per_share|inr(0) }}</td></tr>
+    <tr><td>Margin of safety at CMP vs base value</td><td>{{ v.margin_of_safety|pct }}</td></tr></table></div>
+  <div><table><tr><th class="l">Defensive-investor test</th><th>Value</th><th>Result</th></tr>
+    {% for c in v.graham.checklist %}<tr><td class="l">{{ c.criterion }}</td><td>{{ c.value }}</td><td>{% if c['pass'] is none %}<span class="pill na">n/a</span>{% elif c['pass'] %}<span class="pill ok">Pass</span>{% else %}<span class="pill bad">Fail</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
+  <div class="box info"><h4>Valuation conclusion</h4>At CMP {{ mk.cmp|inr }}, the probability-weighted value is {{ v.target_price|inr }} ({{ v.upside|pct }} upside; expected total return {{ v.total_return|pct }}), which maps to <b>{{ v.band_rating }}</b> under the rating bands.{% if v.warnings %}<br><span class="small">Notes: {{ v.warnings|join(' · ') }}</span>{% endif %}</div>
+</section>
+
+<!-- 10 -->
+<section class="card c1">
+  <h2><span class="num">SECTION 10</span> Quarterly performance tracker and short-term check</h2>
+  {% if quarters %}<div class="tablewrap"><table><tr><th class="l">Quarter</th><th>Revenue (₹ Cr)</th><th>YoY</th><th>EBITDA (₹ Cr)</th><th>EBITDA margin</th><th>PAT (₹ Cr)</th><th>PAT YoY</th><th>EPS (₹)</th></tr>
+  {% for r in quarters %}<tr><td>{{ r.q }}</td><td>{{ r.rev }}</td><td>{{ r.yoy }}</td><td>{{ r.ebitda }}</td><td>{{ r.mgn }}</td><td>{{ r.pat }}</td><td>{{ r.pat_yoy }}</td><td>{{ r.eps }}</td></tr>{% endfor %}</table></div>{% endif %}
+  <div class="grid2">
+    <div class="box"><h4>Short-term check (last 5–10 trading days)</h4>
+      {% for k in ['5d','10d'] %}{% if short_term.get(k) %}{% set s = short_term[k] %}<div>{{ k }} ({{ s['from'] }} → {{ s.to }}): stock <b>{{ s.stock|pct }}</b> vs benchmark {{ s.get('benchmark')|pct }} (relative {{ s.get('relative')|pct }})</div>{% endif %}{% endfor %}
+      {% if short_term.get('volume_10d_vs_3m') %}<div>10-day volume vs 3-month average: {{ short_term.volume_10d_vs_3m|x(2) }}</div>{% endif %}
+      <div class="small" style="margin-top:6px">This box informs entry timing only; it does not change the 12-month rating unless the kill fact occurs.</div></div>
+    <div class="box kill"><h4>Kill-fact monitor</h4>{{ final.kill_fact }}<div class="small" style="margin-top:6px">Check at every quarterly update.</div></div>
+  </div>
+  {% if memos.get("news") %}<div class="agent"><div class="who">{{ titles["news"] }}</div>{{ memos["news"]|md|safe }}</div>{% endif %}
+  {% if announcements %}<h3>Recent exchange announcements</h3><table><tr><th class="l">Date</th><th class="l">Announcement</th></tr>
+  {% for a in announcements %}<tr><td class="l">{{ a.date }}</td><td class="l"><a href="{{ a.url }}">{{ a.title }}</a>{% if a.summary %} — <span class="small">{{ a.summary }}</span>{% endif %}</td></tr>{% endfor %}</table>{% endif %}
+  {% if news %}<h3>Recent news headlines</h3><table><tr><th class="l">Date</th><th class="l">Source</th><th class="l">Headline</th></tr>
+  {% for n in news %}<tr><td class="l">{{ n.date }}</td><td class="l">{{ n.source }}</td><td class="l"><a href="{{ n.url }}">{{ n.title }}</a></td></tr>{% endfor %}</table>{% endif %}
+</section>
+
+<!-- 11 -->
+<section class="card c4">
+  <h2><span class="num">SECTION 11</span> Technical analysis (10 years)</h2>
+  {% if charts.technical %}<img class="chart" src="{{ charts.technical }}" alt="10-year technical chart">{% endif %}
+  {% if charts.relative %}<img class="chart" src="{{ charts.relative }}" alt="Relative performance chart">{% endif %}
+  {% if t.available %}<table><tr><th class="l">Indicator</th><th>Value</th><th class="l">Reading</th></tr>
+    <tr><td>Close / 50-DMA / 200-DMA</td><td>{{ t.close|inr(0) }} / {{ t.indicators.get('sma50')|inr(0) }} / {{ t.indicators.get('sma200')|inr(0) }}</td><td class="l">{{ t.signals[:2]|join('; ') }}</td></tr>
+    <tr><td>RSI (14)</td><td>{{ t.indicators.get('rsi14')|num(1) }}</td><td class="l">{{ t.signals[2] if t.signals|length > 2 else '' }}</td></tr>
+    <tr><td>MACD / signal</td><td>{{ t.indicators.get('macd')|num(2) }} / {{ t.indicators.get('signal')|num(2) }}</td><td class="l">{{ t.signals[3] if t.signals|length > 3 else '' }}</td></tr>
+    <tr><td>Bollinger (20, 2)</td><td>{{ t.indicators.get('bb_lower')|inr(0) }} – {{ t.indicators.get('bb_upper')|inr(0) }}</td><td class="l"></td></tr>
+    <tr><td>ADX (14) / ATR (14)</td><td>{{ t.indicators.get('adx14')|num(1) }} / {{ t.indicators.get('atr14')|num(1) }}</td><td class="l">{{ t.signals[4] if t.signals|length > 4 else '' }}</td></tr>
+    <tr><td>Returns 1Y / 3Y / 5Y / 10Y (CAGR)</td><td>{{ t.returns['1Y']|pct }} / {{ t.returns['3Y']|pct }} / {{ t.returns['5Y']|pct }} / {{ t.returns['10Y']|pct }}</td><td class="l">Benchmark 1Y {{ t.get('benchmark_returns', {}).get('1Y')|pct }}</td></tr>
+    <tr><td>Max drawdown (10Y)</td><td>{{ t.max_drawdown_10y[0]|pct }}</td><td class="l">Peak {{ t.max_drawdown_10y[1] }} → trough {{ t.max_drawdown_10y[2] }}</td></tr>
+    <tr><td>Volatility (1Y, annualised)</td><td>{{ t.volatility_1y|pct }}</td><td class="l"></td></tr></table>{% endif %}
+  {% if memos.get("technical") %}<div class="agent"><div class="who">{{ titles["technical"] }}</div>{{ memos["technical"]|md|safe }}</div>{% endif %}
+</section>
+
+<!-- 12 -->
+<section class="card c5">
+  <h2><span class="num">SECTION 12</span> Risk analysis</h2>
+  <table><tr><th class="l">Risk factor</th><th class="l">Category</th><th>Probability</th><th>Impact</th><th class="l">Description and mitigant</th></tr>
+  {% for r in final.risks %}<tr><td class="l"><b>{{ r.risk }}</b></td><td class="l">{{ r.category }}</td><td><span class="pill {{ r.probability }}">{{ r.probability }}</span></td><td><span class="pill {{ r.impact }}">{{ r.impact }}</span></td><td class="l">{{ r.description_and_mitigant }}</td></tr>{% endfor %}</table>
+</section>
+
+<!-- 13 -->
+<section class="card c6">
+  <h2><span class="num">SECTION 13</span> ESG assessment</h2>
+  <table><tr><th class="l">Pillar</th><th class="l">Assessment</th><th class="l">Commentary</th></tr>
+  {% for e in final.esg %}<tr><td class="l"><b>{{ e.pillar }}</b></td><td class="l">{{ e.assessment }}</td><td class="l">{{ e.commentary }}</td></tr>{% endfor %}</table>
+  <p class="small">Qualitative assessment from disclosed information only. No numeric ESG score is given because none can be verified from the sources used.</p>
+</section>
+
+<!-- Appendices -->
+<section class="card">
+  <h2><span class="num">APPENDIX A1</span> Key ratios and per-share data</h2>
+  <div class="tablewrap"><table><tr><th class="l">Ratio</th>{% for c in ratios.cols %}<th>{{ c }}A</th>{% endfor %}</tr>
+  {% for r in ratios.rows %}<tr><td>{{ r.label }}</td>{% for x in r['values'] %}<td>{{ x }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  <p class="small">P/E and P/B use the closing price on the last trading day of each fiscal year. ROE and ROCE are computed on average capital; Screener's published ROCE is shown for comparison.</p>
+</section>
+
+<section class="card">
+  <h2><span class="num">APPENDIX A2</span> Data quality, reconciliation and number audit</h2>
+  <p><b>Reconciliation:</b> {{ reconciliation|length - rec_failed|length }} of {{ reconciliation|length }} checks passed.</p>
+  {% if rec_failed %}<table><tr><th class="l">Check</th><th>Period</th><th>Expected</th><th>Reported</th><th>Difference</th></tr>
+  {% for r in rec_failed %}<tr><td class="l">{{ r.check }}</td><td>{{ r.period }}</td><td>{{ r.expected|num(2) }}</td><td>{{ r.actual|num(2) }}</td><td>{{ r.difference|num(2) }}</td></tr>{% endfor %}</table>{% endif %}
+  <p><b>Number audit:</b> {% if audit_flags %}figures below appear in agent text but could not be traced to the fact pack within rounding tolerance. Treat the claims that rely on them with caution.{% else %}every figure in the {{ audit_count }} audited agent outputs traced back to the fact pack.{% endif %}</p>
+  {% if audit_flags %}<table><tr><th class="l">Agent</th><th class="l">Untraced figures</th></tr>{% for k, x in audit_flags.items() %}<tr><td class="l">{{ k }}</td><td class="l">{{ x|join(', ') }}</td></tr>{% endfor %}</table>{% endif %}
+  {% if warnings %}<div class="box warn"><h4>Data caveats</h4><ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+</section>
+
+{% if council and council.get('verdict') %}{% set cv = council.verdict %}
+<section class="card c4">
+  <h2><span class="num">APPENDIX A3</span> Independent council review</h2>
+  <p>After the CIO signed the decision, five independent advisors (Contrarian, First-Principles Thinker, Expansionist, Outsider, Executor) reviewed the report, peer-reviewed each other anonymously, and a chair gave the verdict.</p>
+  <div class="grid2">
+    <div class="box info"><h4>Council verdict: {{ cv.verdict }}</h4>{{ cv.recommendation }}<br><b>First step:</b> {{ cv.one_thing_first }}</div>
+    <div class="box {{ 'info' if cv.report_complete else 'warn' }}"><h4>Report completeness: {{ 'complete' if cv.report_complete else 'gaps found' }}</h4>{% if cv.gaps_in_report %}<ul>{% for g in cv.gaps_in_report %}<li>{{ g }}</li>{% endfor %}</ul>{% else %}No gaps that would change the call.{% endif %}</div>
+  </div>
+  <div class="grid3" style="margin-top:12px">
+    <div class="box"><h4>Where the council agrees</h4><ul>{% for x in cv.where_council_agrees %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    <div class="box"><h4>Where it clashes</h4><ul>{% for x in cv.where_council_clashes %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    <div class="box"><h4>Blind spots caught</h4><ul>{% for x in cv.blind_spots %}<li>{{ x }}</li>{% endfor %}</ul></div>
+  </div>
+  <p class="small" style="margin-top:10px">The council's verdict is an independent second opinion. It does not change the CIO's rating, which follows the expected-return bands.</p>
+</section>{% elif council and council.get('error') %}<section class="card"><h2><span class="num">APPENDIX A3</span> Independent council review</h2><p>The council could not run: {{ council.error }}</p></section>{% endif %}
+
+<section class="card c1">
+  <h2><span class="num">APPENDIX A4</span> Research team and CIO review</h2>
+  <table><tr><th class="l">Desk</th><th class="l">CIO brief</th><th class="l">CIO review</th></tr>
+  {% for b in mandate.get('briefs', []) %}{% set rv = (desk_review.get('reviews', [])|selectattr('desk','equalto',b.desk)|list) %}<tr><td class="l"><b>{{ titles[b.desk] }}</b></td><td class="l">{{ b.focus }}</td><td class="l">{% if rv %}<span class="pill {{ 'ok' if rv[0].verdict == 'accept' else 'bad' }}">{{ 'Accepted' if rv[0].verdict == 'accept' else 'Sent back' }}</span> {{ rv[0].notes }}{% else %}—{% endif %}</td></tr>{% endfor %}</table>
+  {% if revisions %}<p class="small">Revisions requested by the CIO: {% for r in revisions %}{{ titles[r.desk] }} (round {{ r.round }}){{ '; ' if not loop.last }}{% endfor %}.</p>{% endif %}
+  {% if desk_review.synthesis %}<div class="box"><h4>CIO synthesis of the desk work</h4>{{ desk_review.synthesis|md|safe }}</div>{% endif %}
+  {% if mandate.watch_items %}<p class="small" style="margin-top:10px"><b>Watch items set by the CIO:</b> {{ mandate.watch_items|join(' · ') }}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2><span class="num">APPENDIX A5</span> Methodology, glossary and rating definitions</h2>
+  <div class="grid2"><div>
+  <table><tr><th class="l">Term</th><th class="l">Definition</th></tr>
+    <tr><td class="l">DCF / FCFF</td><td class="l">Discounted cash flow; free cash flow to the firm = NOPAT + D&amp;A − capex − change in working capital, discounted at WACC</td></tr>
+    <tr><td class="l">WACC</td><td class="l">Weighted average cost of capital (equity and debt)</td></tr>
+    <tr><td class="l">Terminal value</td><td class="l">Value beyond the explicit forecast; NOPAT × (1 − g/ROC) ÷ (WACC − g)</td></tr>
+    <tr><td class="l">EBITDA / EBIT</td><td class="l">Operating profit before / after depreciation and amortisation</td></tr>
+    <tr><td class="l">ROE / ROCE</td><td class="l">PAT ÷ average equity; (PBT + interest) ÷ average (equity + borrowings)</td></tr>
+    <tr><td class="l">CFO / PAT</td><td class="l">Operating cash flow ÷ profit; below 0.7 for years is an earnings-quality warning</td></tr>
+    <tr><td class="l">Margin of safety</td><td class="l">(Intrinsic value − price) ÷ intrinsic value (Graham)</td></tr>
+    <tr><td class="l">Kill fact</td><td class="l">The specific fact that, if it occurs, overturns the call</td></tr>
+    <tr><td class="l">Crore (Cr)</td><td class="l">10 million; ₹1 Cr = ₹1,00,00,000</td></tr></table>
+  </div><div>
+  <table><tr><th class="l">Rating</th><th class="l">Expected total return, next 12 months</th></tr>
+    <tr><td class="l"><b style="color:var(--buy)">BUY</b></td><td class="l">Above {{ (cfg.rating_bands.buy*100)|round|int }}%</td></tr>
+    <tr><td class="l"><b style="color:var(--hold)">HOLD</b></td><td class="l">{{ (cfg.rating_bands.sell*100)|round|int }}% to {{ (cfg.rating_bands.buy*100)|round|int }}%</td></tr>
+    <tr><td class="l"><b style="color:var(--sell)">SELL</b></td><td class="l">Below {{ (cfg.rating_bands.sell*100)|round|int }}%</td></tr></table>
+  <p class="small">Process: the Data &amp; Quant Desk collects and reconciles the data → the CIO sets the mandate and briefs each research desk → desks write memos in parallel → Compliance audits them and the CIO reviews (weak memos go back for revision) → the Valuation Analyst sets assumptions and the engine does all arithmetic → Bull and Bear Advocates debate and the CIO names the kill fact → the Chief Risk Officer stress-tests the view → the CIO signs the decision → Compliance enforces the rating bands → an independent council reviews the signed report. Methodology: Damodaran (Investment Valuation), Graham (The Intelligent Investor), Graham &amp; Dodd (Security Analysis), calibrated for India.</p>
+  </div></div>
+  {% if sources %}<h3>Sources</h3><ul class="small">{% for s in sources %}<li><a href="{{ s.url }}">{{ s.name }}</a></li>{% endfor %}</ul>{% endif %}
+</section>
+
+<section class="card">
+  <h2><span class="num">DISCLOSURES</span> Analyst details and disclaimer</h2>
+  <table><tr><th class="l">Item</th><th class="l">Details</th></tr>
+    <tr><td class="l">Prepared by</td><td class="l">{{ cfg.analyst_name }} — AI analysts led by an AI Chief Investment Officer</td></tr>
+    <tr><td class="l">Research firm</td><td class="l">{{ cfg.firm_name }} (open-source software, not a registered research entity)</td></tr>
+    <tr><td class="l">SEBI registration</td><td class="l"><b>Not registered</b> as a Research Analyst under the SEBI (Research Analysts) Regulations, 2014</td></tr>
+    <tr><td class="l">Date published</td><td class="l">{{ published }}</td></tr>
+    <tr><td class="l">Previous rating</td><td class="l">{% if prior_calls %}{{ prior_calls[-1].rating }} ({{ prior_calls[-1].call_date }}){% else %}Initiating coverage{% endif %}</td></tr>
+    <tr><td class="l">Models</td><td class="l">Senior tier (CIO, valuation, risk): {{ cfg.deep_think_llm }} · Analyst tier: {{ cfg.quick_think_llm }} ({{ cfg.llm_provider }})</td></tr></table>
+  <p class="disclaimer">This report was generated by open-source software using large language models and public data sources (Screener.in, Yahoo Finance, BSE filings, Google News). It is provided for education and information only. It is not investment advice, not a research report under the SEBI (Research Analysts) Regulations, 2014, and not an offer or solicitation to buy or sell any security. Language models can make mistakes, and public data can be incomplete, delayed or wrong; the report shows its reconciliation checks and number audit so you can see where the data is weak, but you must verify every figure against the company's filings before relying on it. Past performance does not indicate future results. Investments in securities markets are subject to market risks; read all related documents carefully and consult a SEBI-registered investment adviser before investing. The authors and contributors of the software accept no liability for any loss arising from its use.</p>
+</section>
+
+<div class="footer">{{ cfg.firm_name }} · AlaDeen Capital Research v{{ version }} · {{ fp.exchange }}: {{ fp.ticker }} · {{ published }}</div>
+</div>
+</body>
+</html>

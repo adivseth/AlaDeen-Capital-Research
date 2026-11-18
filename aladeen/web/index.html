@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlaDeen Capital Research</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Ctext x='32' y='43' font-family='Arial' font-size='30' font-weight='700' fill='white' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="brand" href="#/">
+      <span class="brand-mark">A</span>
+      <span><b>AlaDeen</b><small>Capital Research</small></span>
+    </a>
+    <nav>
+      <a href="#/" data-nav="home"><span>✦</span>New research</a>
+      <a href="#/office" data-nav="office"><span>🏢</span>Live office</a>
+      <a href="#/history" data-nav="history"><span>🗂️</span>Research archive</a>
+      <a href="#/calls" data-nav="calls"><span>🎯</span>Call log</a>
+      <a href="#/settings" data-nav="settings"><span>⚙️</span>Settings</a>
+    </nav>
+    <div class="sidebar-foot">
+      <div id="model-chip" class="model-chip">Loading…</div>
+      <div class="muted tiny">Not investment advice · Not SEBI-registered</div>
+    </div>
+  </aside>
+  <main id="view" class="view"></main>
+</div>
+<div id="toast" class="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

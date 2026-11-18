@@ -1,0 +1,22 @@
+# Same as pyproject.toml; for `pip install -r requirements.txt`
+langchain-core>=0.3
+langchain-anthropic>=0.3
+langchain-openai>=0.3
+langchain-google-genai>=2.0
+pydantic>=2.6
+yfinance>=0.2.50
+pandas>=2.1
+numpy>=1.26
+requests>=2.31
+beautifulsoup4>=4.12
+lxml>=5.0
+pypdf>=4.0
+matplotlib>=3.8
+pillow>=10.0
+jinja2>=3.1
+markdown-it-py>=3.0
+typer>=0.12
+rich>=13.0
+python-dotenv>=1.0
+fastapi>=0.110
+uvicorn>=0.29
