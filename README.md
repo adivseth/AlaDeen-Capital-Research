@@ -63,7 +63,43 @@ aladeen demo
 - Then research a real company: `aladeen TCS`
 - Next time, open a new terminal, `cd` into the folder and activate the environment again (the activate line
   for your system) before using `aladeen`. Your prompt shows `(.venv)` when it is active.
-- To update later: `git pull` then `pip install -e .`
+- To get the latest version, see [Updating](#updating) below.
+
+## Updating
+
+Your settings, API keys and past research live in your home folder (`~/.aladeen`), not in the repo, so updating
+never touches them. Close any running `aladeen` window first (Ctrl+C), then run the commands for your system.
+The `cd` line assumes you cloned into your home folder; if you cloned elsewhere, `cd` into that folder instead.
+
+### Windows — PowerShell
+
+```powershell
+cd $HOME\AlaDeen-Capital-Research
+.venv\Scripts\Activate.ps1
+git pull
+pip install -e .
+```
+
+### Windows — Command Prompt (cmd)
+
+```bat
+cd %USERPROFILE%\AlaDeen-Capital-Research
+.venv\Scripts\activate.bat
+git pull
+pip install -e .
+```
+
+### macOS / Linux
+
+```bash
+cd ~/AlaDeen-Capital-Research
+source .venv/bin/activate
+git pull
+pip install -e .
+```
+
+If `git pull` says your local changes would be overwritten (for example, you edited a file in the repo), run
+`git stash` and then `git pull` again. `git stash` sets your edits aside; `git stash pop` brings them back.
 
 ## The dashboard
 
