@@ -17,29 +17,53 @@ code, reconciled and audited. If an agent writes a number it was not given, the 
 
 ## Quick start
 
-```bash
-git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
-cd AlaDeen-Capital-Research
-python -m venv .venv && source .venv/bin/activate
-pip install -e .
+You need **Python 3.11 or newer** and **Git**. Check with `python --version` (on macOS/Linux: `python3 --version`).
+Run the commands **one line at a time**.
 
-aladeen demo        # watch the firm research a synthetic company — no API key needed
-aladeen TCS         # research TCS (add your API key in Settings first)
-```
-
-**Windows (PowerShell)** — run one line at a time:
+### Windows — PowerShell
 
 ```powershell
 git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
 cd AlaDeen-Capital-Research
 python -m venv .venv
-.venv\Scripts\Activate.ps1      # if "running scripts is disabled": Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.venv\Scripts\Activate.ps1
 pip install -e .
 aladeen demo
 ```
 
-Python 3.11+ is required. On first use, open **Settings** in the dashboard, pick an AI provider and paste its
-API key.
+If activation says *"running scripts is disabled on this system"*, run
+`Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` (this window only) and repeat the activate line.
+
+### Windows — Command Prompt (cmd)
+
+```bat
+git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
+cd AlaDeen-Capital-Research
+python -m venv .venv
+.venv\Scripts\activate.bat
+pip install -e .
+aladeen demo
+```
+
+### macOS / Linux
+
+```bash
+git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
+cd AlaDeen-Capital-Research
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+aladeen demo
+```
+
+### After installing (all systems)
+
+- `aladeen demo` opens the dashboard and shows the firm researching a synthetic company — no API key needed.
+- Open **Settings** in the dashboard, pick an AI provider and paste its API key.
+- Then research a real company: `aladeen TCS`
+- Next time, open a new terminal, `cd` into the folder and activate the environment again (the activate line
+  for your system) before using `aladeen`. Your prompt shows `(.venv)` when it is active.
+- To update later: `git pull` then `pip install -e .`
 
 ## The dashboard
 
