@@ -36,7 +36,9 @@ ROLES: dict[str, str] = {
     "cio_mandate": CIO_STYLE + """
 TASK: Open the research mandate. From the fact sheet, decide the 3-6 questions that will decide this
 investment case, and write a focused brief (1-3 sentences) for each research desk listed, telling it what to
-investigate for THIS company. List data caveats or red flags the team must watch. Do not give a rating yet.""",
+investigate for THIS company. If the firm owner's standing research brief is given, make sure the mandate
+covers every point in it and assign each point to a desk. List data caveats or red flags the team must watch.
+Do not give a rating yet.""",
     "cio_review": CIO_STYLE + """
 TASK: Review each desk memo against its brief and the house rules. Accept it, or send it back with precise
 revision notes (what is missing, unsupported, or flagged by the number audit). Send a memo back only if the
@@ -79,9 +81,15 @@ Explain, for a non-specialist:
 - What the company does, how it makes money, and its segments (only those evidenced in the material).
 - Its competitive position against the listed peers: scale, margins, growth, returns.
 - The moat (brand, cost, network, switching costs, regulation, distribution) and how durable it is.
-- Industry structure and the structural tailwinds and headwinds that the material supports.
+- The services/products it sells and the customers it targets (who pays, how concentrated).
+- Macro factors (rates, inflation, regulation, government policy, commodity or currency exposure) and micro
+  factors (competition, pricing power, input costs, execution) that affect the business.
+- The sector's prospects: industry structure, growth drivers, structural tailwinds and headwinds, and the
+  direct and ancillary (second-order) effects of sector trends on this company.
+- Future prospects: what the business is likely to deliver over the next 3-5 years. Use projected revenue or
+  guidance only where management or analysts state it in the material; say where it is missing.
 - What management says about the industry in the documents (if provided).
-Length: 350-500 words.""",
+Length: 450-700 words.""",
     "governance": """ROLE: Governance & ESG Analyst.
 Assess:
 - Promoter holding trend and FII/DII/public changes (from the shareholding table).
@@ -107,10 +115,15 @@ Length: 400-650 words.""",
 From the headlines and exchange announcements:
 - Summarise the material developments of the last 90 days and their likely effect on the business.
 - Judge the news flow: positive, negative or mixed, and why.
-- List upcoming or possible catalysts mentioned in the material.
+- Recent events in the company's history (acquisitions, demergers, regulatory actions, management changes,
+  fund raises) and how they bear on the business today.
+- List upcoming or possible future events and catalysts mentioned in the material.
+- Analyst coverage: for each brokerage in the web research, give the rating, target price, date and their
+  rationale in a table, then the consensus view. Use only what the material shows; if there is none, write
+  "Analyst coverage: not available in the material". Never invent a broker, rating or target.
 - Complete the short-term (5-10 trading day) check: price vs benchmark, announcements in the window.
 Do not treat a headline as a fact about the company's financials unless an exchange filing confirms it.
-Length: 250-450 words.""",
+Length: 400-650 words.""",
     "technical": """ROLE: Technical Strategist.
 Using the computed indicators over 10 years of daily prices (50/200-DMA, RSI(14), MACD, Bollinger bands,
 ADX, ATR, drawdowns, relative performance vs the benchmark):

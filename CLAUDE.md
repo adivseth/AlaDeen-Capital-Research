@@ -16,6 +16,11 @@ research, value or track an Indian stock, use the tools here rather than computi
 3. **Quarterly update:** `aladeen track TICKER` (short-term check, announcements, prior call, kill fact).
 4. **"Score my calls":** `aladeen score`, then report the hit rate and alpha by rating.
 
+## The /deep-dive command
+
+`/deep-dive <company>` (`.claude/commands/deep-dive.md`) is the owner's standard research prompt. Follow it in
+full, using this file's workflow and the connectors below.
+
 ## When you run inside Claude with connectors
 
 If the session has these connectors, prefer them to the app's own fetchers and say which source each figure came from:

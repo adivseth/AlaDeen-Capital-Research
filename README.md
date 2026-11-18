@@ -107,8 +107,16 @@ flowchart LR
     A[Data collection] --> B[CIO mandate] --> C[Desk research<br/>6 desks in parallel]
     C --> D[CIO review<br/>send-backs] --> E[Valuation] --> F[Bull vs bear<br/>CIO ruling + kill fact]
     F --> G[Risk office] --> H[CIO decision] --> I[Compliance<br/>bands + number audit]
-    I --> J[Independent council] --> K[Publication + call log]
+    I --> J[Independent council] --> L[Council follow-up<br/>gaps fixed, decision re-signed] --> K[Publication + call log]
 ```
+
+**Your research brief.** Settings → Research brief holds your standing instructions (pre-filled with the
+firm's deep-dive brief: macro and micro factors, company history, future events, moat, analyst coverage with
+rationale, sector prospects including ancillary effects, services, customers, projected revenue, future
+prospects, and a completeness check). The CIO turns it into the mandate and every desk reads it.
+
+**Completeness check.** If the independent council finds the research incomplete, the CIO sends its gaps back
+to the desks that must fix them and re-signs the decision before the report is published.
 
 **The rating follows the bands.** BUY if the expected 12-month total return is above 15%, HOLD between 0% and
 15%, SELL below 0%. If the CIO's rating disagrees with the bands, Compliance overrides it and says so in the
@@ -155,7 +163,9 @@ save to the archive).
 **Backup data sources (optional).** Add keys in Settings → Backup data sources and the app uses them only when
 the primary source fails: **Alpha Vantage** for price history when Yahoo Finance fails (a free key may return only
 the last 100 trading days), and **Firecrawl** then **Exa** to read annual reports and concall transcripts when BSE
-blocks the download. The report says when a backup was used.
+blocks the download. With an **Exa** key the desks also get web research: analyst coverage (broker, rating,
+target, rationale), sector and macro outlook, and company history. Without it the report says analyst coverage
+was not available rather than inventing it. The report says when a backup was used.
 
 Market inputs are dated defaults — check them in Settings before relying on a valuation: risk-free rate
 7.22% (RBI-reported 10Y G-Sec yield, 11-Nov-2026), India equity risk premium 7.0%. See
@@ -167,7 +177,9 @@ Market inputs are dated defaults — check them in Settings before relying on a 
 - [docs/configuration.md](docs/configuration.md) — every setting
 - [docs/call-log.md](docs/call-log.md) — call log columns, Google Sheets, scoring rules
 - Docker: `docker compose up` serves the dashboard on http://localhost:8765
-- Claude Code: the repo ships a [`CLAUDE.md`](CLAUDE.md) and skills in [`.claude/skills/`](.claude/skills)
+- Claude Code: the repo ships a [`CLAUDE.md`](CLAUDE.md), skills in [`.claude/skills/`](.claude/skills) and a
+  `/deep-dive <company>` command ([`.claude/commands/deep-dive.md`](.claude/commands/deep-dive.md)) that runs the
+  full deep-dive prompt inside Claude with your connectors and plugins.
 
 ## Development
 

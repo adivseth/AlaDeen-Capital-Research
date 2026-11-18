@@ -18,6 +18,13 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 | `margin_of_safety` | — | 0.33 | Entry price = base value × (1 − MoS). |
 | `tv_share_warning` | — | 0.80 | Warn when terminal value exceeds this share of EV. |
 
+## Research brief and follow-up
+
+| Key | Default |
+|---|---|
+| `research_brief` | The firm's deep-dive brief (editable in Settings; max 8,000 characters; empty = standard process only) |
+| `council_followup` | on — when the council finds the research incomplete, gaps go back to the desks and the decision is re-signed |
+
 ## LLMs
 
 | Key | Env | Default |

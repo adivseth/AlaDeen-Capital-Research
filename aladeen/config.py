@@ -71,6 +71,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "gsheets_spreadsheet_id": None,
     "gsheets_worksheet": "Calls",
     "gsheets_credentials": None,
+    # ---------------------------------------------------------------- Research brief
+    # The owner's standing instructions: the CIO and every desk read them on every research.
+    "research_brief": """Perform a deep dive into the business of the company. Look into the macro and micro factors affecting the business, recent events in the company's history that will have an impact on its business, any future events bearing on the business, an analysis of the moat, and the analysts tracking the stock with their rationale. Be unbiased, do not invent any fact, and cross-check facts. Research comprehensively, from all angles.
+Evaluate the business on its future prospects, not just its fundamentals and technicals, because a stock is priced for what it is going to deliver in the future, not just for its past financials. Evaluate the sector and its prospects (direct and ancillary impact), the services the company provides, the customers it targets, the projected revenue, and recent trends and news affecting the stock or the sector.
+Before finalising, assess whether complete and accurate research has been done. If not, do it.""",
+    # After the independent council, send its gaps back to the desks once and re-sign the decision.
+    "council_followup": True,
     # ---------------------------------------------------------------- Report
     "firm_name": "AlaDeen Capital Research",
     "analyst_name": "AlaDeen Capital Research AI team",
@@ -84,6 +91,7 @@ EDITABLE = [
     "max_concall_transcripts", "news_lookback_days", "risk_free_rate", "equity_risk_premium", "tax_rate",
     "terminal_growth_cap", "dcf_weight", "scenario_probabilities", "scenario_multiple_factors",
     "margin_of_safety", "rating_bands", "firm_name", "analyst_name", "port", "open_browser",
+    "research_brief", "council_followup",
 ]
 
 _ENV_MAP: dict[str, tuple[str, type]] = {
@@ -181,6 +189,8 @@ def validate_config(cfg: dict[str, Any]) -> None:
     for key in ("llm_provider", "deep_provider", "quick_provider"):
         if cfg.get(key) and cfg[key] not in PROVIDER_IDS:
             raise ValueError(f"Unknown AI provider {cfg[key]!r}; choose from {', '.join(PROVIDER_IDS)}")
+    if len(cfg.get("research_brief") or "") > 8000:
+        raise ValueError("The research brief is too long (max 8,000 characters)")
     unknown = [d for d in cfg["desks"] if d not in DESKS]
     if unknown:
         raise ValueError(f"Unknown research desks: {unknown}")

@@ -76,6 +76,38 @@ def exa_text(url: str, api_key: str, session=requests) -> str:
     return text
 
 
+def exa_search(query: str, api_key: str, n: int = 5, session=requests) -> list[dict]:
+    """Web search via Exa (POST /search). Returns [{title, url, date, text}] with text trimmed."""
+    r = session.post("https://api.exa.ai/search", timeout=TIMEOUT, headers={"x-api-key": api_key},
+                     json={"query": query, "numResults": n, "contents": {"text": True}})
+    if not r.ok:
+        raise DataUnavailable(f"Exa search failed: HTTP {r.status_code}")
+    return [{"title": x.get("title") or "", "url": x.get("url") or "", "date": (x.get("publishedDate") or "")[:10],
+             "text": (x.get("text") or "")[:1500]} for x in r.json().get("results") or []]
+
+
+# topic -> query; "{name}" is the company name
+WEB_TOPICS = {
+    "analysts": "{name} share brokerage analyst rating target price rationale",
+    "sector": "{name} sector industry outlook India growth drivers regulation",
+    "history": "{name} company history key events acquisitions regulatory actions management changes",
+}
+
+
+def web_research(name: str, cfg: dict) -> list[dict]:
+    """One Exa search per topic. Empty when no Exa key. Each item carries its topic."""
+    k = key(cfg, "exa")
+    if not k:
+        return []
+    out = []
+    for topic, q in WEB_TOPICS.items():
+        try:
+            out += [{"topic": topic, **x} for x in exa_search(q.format(name=name), k)]
+        except (DataUnavailable, requests.RequestException, ValueError):
+            continue  # a failed topic is reported as missing by the desk that needed it
+    return out
+
+
 def document_text(url: str, cfg: dict) -> tuple[str, str]:
     """Text of a document via Firecrawl, then Exa. Returns (text, source name)."""
     errors = []

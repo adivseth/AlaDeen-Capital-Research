@@ -35,7 +35,8 @@ PROVIDERS = [
 DATA_SOURCES = [
     {"id": "alphavantage", "label": "Alpha Vantage", "use": "Backup price history when Yahoo Finance fails"},
     {"id": "firecrawl", "label": "Firecrawl", "use": "Reads annual reports and concalls when BSE blocks the download"},
-    {"id": "exa", "label": "Exa", "use": "Second backup for reading annual reports and concalls"},
+    {"id": "exa", "label": "Exa", "use": "Web research (analyst coverage, sector outlook, company history) and a second "
+     "backup for reading annual reports and concalls"},
 ]
 KEY_ENVS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
             "xai": "XAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", **backups.KEY_ENV}

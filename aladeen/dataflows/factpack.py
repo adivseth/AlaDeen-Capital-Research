@@ -38,6 +38,7 @@ class FactPack:
     prices: pd.DataFrame = field(default_factory=pd.DataFrame)
     benchmark_prices: pd.DataFrame = field(default_factory=pd.DataFrame)
     news: list[dict] = field(default_factory=list)
+    web: list[dict] = field(default_factory=list)  # Exa web research: analysts, sector, history
     documents: list[dict] = field(default_factory=list)  # includes "text"
     warnings: list[str] = field(default_factory=list)
     sources: list[dict] = field(default_factory=list)
@@ -186,6 +187,14 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
         fp.sources.append({"name": "Google News RSS search", "url": "https://news.google.com"})
     except Exception as e:  # noqa: BLE001
         fp.warn(f"News feed unavailable: {e}")
+
+    # 4b. Web research (optional, needs an Exa key): analyst coverage, sector outlook, company history
+    if backups.key(cfg, "exa"):
+        progress("Web research (Exa): analyst coverage, sector outlook, company history")
+        fp.web = backups.web_research(fp.company["name"], cfg)
+        fp.sources += [{"name": f"{w['title']} ({w['date'] or 'undated'})", "url": w["url"]} for w in fp.web]
+        if not fp.web:
+            fp.warn("Web research returned nothing; analyst coverage and sector outlook rely on other material.")
 
     # 5. Annual reports and concall transcripts
     if cfg.get("fetch_documents", True) and sc_.get("documents"):

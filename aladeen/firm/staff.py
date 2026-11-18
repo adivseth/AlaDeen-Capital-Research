@@ -75,7 +75,8 @@ def desk_material(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict) -
                  cx.warnings_md(fp)]
     elif desk == "business":
         parts = [cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 6), cx.peers_md(fp, q),
-                 "## Annual report excerpts\n" + _excerpt(fp, "annual_report", _BIZ_KEYS, 15000)]
+                 "## Annual report excerpts\n" + _excerpt(fp, "annual_report", _BIZ_KEYS, 15000),
+                 cx.web_md(fp, "sector")]
     elif desk == "governance":
         parts = [cx.company_md(fp), cx.shareholding_md(fp), cx.financials_md(q, 10),
                  cx.documents_index_md(fp), cx.news_md(fp, 10),
@@ -84,7 +85,8 @@ def desk_material(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict) -
     elif desk == "technical":
         parts = [cx.market_md(q), cx.technicals_md(q), cx.short_term_md(q, fp)]
     elif desk == "news":
-        parts = [cx.company_md(fp), cx.market_md(q), cx.news_md(fp), cx.short_term_md(q, fp)]
+        parts = [cx.company_md(fp), cx.market_md(q), cx.news_md(fp), cx.short_term_md(q, fp),
+                 cx.web_md(fp, "analysts"), cx.web_md(fp, "history")]
     elif desk == "filings":
         parts = [cx.company_md(fp), cx.financials_md(q, 5), _filings_material(runner, cfg, fp)]
     else:
@@ -98,10 +100,15 @@ def memos_md(memos: dict[str, str], only: tuple[str, ...] | None = None) -> str:
 
 
 # ------------------------------------------------------------------ CIO
+def brief_md(cfg: dict) -> str:
+    b = (cfg.get("research_brief") or "").strip()
+    return f"## The firm owner's standing research brief\n{b}" if b else ""
+
+
 def cio_mandate(runner: Runner, cfg: dict, fp: FactPack, q: dict, prior_md: str) -> ResearchMandate:
     desks = ", ".join(f"{d} ({TITLES[d]})" for d in cfg["desks"])
     user = "\n\n".join([cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 5), cx.reconciliation_md(q),
-                        cx.documents_index_md(fp), cx.warnings_md(fp), prior_md,
+                        cx.documents_index_md(fp), cx.warnings_md(fp), prior_md, brief_md(cfg),
                         f"## Research desks to brief\n{desks}"])
     m = runner.structured(system_for("cio_mandate", cfg), user, ResearchMandate, tier="deep", name="cio_mandate")
     data = m.model_dump()
@@ -118,7 +125,7 @@ def write_memo(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict, mand
                revision_notes: str | None = None, previous: str | None = None) -> tuple[str, str]:
     material = desk_material(desk, runner, cfg, fp, q)
     brief = next((b.focus for b in mandate.briefs if b.desk == desk), "")
-    head = [f"## CIO brief for you\n{brief}",
+    head = [brief_md(cfg), f"## CIO brief for you\n{brief}",
             "## CIO's key questions\n" + "\n".join(f"- {x}" for x in mandate.key_questions)]
     if revision_notes:
         head.append(f"## CIO revision request\n{revision_notes}\n\n## Your previous memo\n{previous}\n\n"

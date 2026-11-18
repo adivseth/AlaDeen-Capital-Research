@@ -426,7 +426,7 @@ async function renderSettings() {
   const dataKeyRows = (s.data_sources || []).map(keyRow).join("");
   const desks = s.desks.map((d) => { const a = agentMeta(d); return `<label><input type="checkbox" data-desk="${d}" ${v.desks.includes(d) ? "checked" : ""}> ${a.icon} ${esc(a.title)}</label>`; }).join("");
   view.innerHTML = `<div class="page-head"><div><h1>Settings</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
-  <div class="settings"><div class="toc"><a href="#s-models" data-jump>🧠 AI models</a><a href="#s-keys" data-jump>🔑 API keys</a><a href="#s-team" data-jump>👥 Research team</a><a href="#s-data" data-jump>🗄️ Data</a><a href="#s-val" data-jump>🧮 Valuation</a><a href="#s-brand" data-jump>🏷️ Report &amp; dashboard</a><a href="#s-store" data-jump>📁 Storage</a></div>
+  <div class="settings"><div class="toc"><a href="#s-models" data-jump>🧠 AI models</a><a href="#s-keys" data-jump>🔑 API keys</a><a href="#s-brief" data-jump>📝 Research brief</a><a href="#s-team" data-jump>👥 Research team</a><a href="#s-data" data-jump>🗄️ Data</a><a href="#s-val" data-jump>🧮 Valuation</a><a href="#s-brand" data-jump>🏷️ Report &amp; dashboard</a><a href="#s-store" data-jump>📁 Storage</a></div>
   <form id="sform">
   <section class="card" id="s-models"><h3>🧠 AI models</h3>
     <div class="row2"><div class="field"><label class="f">Provider</label><select id="llm_provider">${provOpts}</select><div class="hint">Claude, OpenAI, Gemini, Grok, OpenRouter, a local Ollama model or any OpenAI-compatible server.</div></div>
@@ -443,11 +443,16 @@ async function renderSettings() {
   </section>
   <section class="card" id="s-keys"><h3>🔑 API keys</h3>${keyRows}
     <h3 style="margin-top:18px">🛟 Backup data sources <span class="muted small" style="font-weight:400">optional</span></h3>${dataKeyRows}<div class="hint">Keys entered here are stored in your settings file (readable only by you). Keys in your environment or <code>.env</code> also work.</div></section>
+  <section class="card" id="s-brief"><h3>📝 Research brief</h3>
+    <label class="f">Your standing instructions — the CIO and every desk follow them on every research</label>
+    <textarea id="research_brief" rows="9" style="width:100%;font:inherit;line-height:1.5">${esc(v.research_brief || "")}</textarea>
+    <div class="hint">Write it once, the way you would brief a research team. Leave it empty to use the firm's standard process only.</div>
+  </section>
   <section class="card" id="s-team"><h3>👥 Research team</h3>
     <label class="f">Research desks the CIO can brief</label><div class="desk-check" style="margin-bottom:14px">${desks}</div>
     <div class="row3"><div class="field"><label class="f">CIO revision rounds</label><input id="cio_revision_rounds" type="number" min="0" max="3" value="${v.cio_revision_rounds}"><div class="hint">How many times the CIO may send memos back.</div></div>
     <div class="field"><label class="f">Debate rebuttal rounds</label><input id="max_debate_rounds" type="number" min="0" max="4" value="${v.max_debate_rounds}"></div>
-    <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="run_council" ${v.run_council ? "checked" : ""}> Independent council review</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="log_calls" ${v.log_calls ? "checked" : ""}> Add calls to the call log</label></div></div>
+    <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="run_council" ${v.run_council ? "checked" : ""}> Independent council review</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="council_followup" ${v.council_followup ? "checked" : ""}> Fix the council's gaps before publishing</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="log_calls" ${v.log_calls ? "checked" : ""}> Add calls to the call log</label></div></div>
   </section>
   <section class="card" id="s-data"><h3>🗄️ Data</h3>
     <div class="row3"><div class="field"><label class="switch"><input type="checkbox" id="fetch_documents" ${v.fetch_documents ? "checked" : ""}> Read annual reports &amp; concall transcripts</label></div>
@@ -509,6 +514,7 @@ async function renderSettings() {
       desks: $$("[data-desk]").filter((c) => c.checked).map((c) => c.dataset.desk),
       cio_revision_rounds: num("cio_revision_rounds"), max_debate_rounds: num("max_debate_rounds"),
       run_council: $("#run_council").checked, log_calls: $("#log_calls").checked,
+      council_followup: $("#council_followup").checked, research_brief: $("#research_brief").value,
       fetch_documents: $("#fetch_documents").checked, document_mode: $("#document_mode").value,
       news_lookback_days: num("news_lookback_days"), max_annual_reports: num("max_annual_reports"), max_concall_transcripts: num("max_concall_transcripts"),
       firm_name: $("#firm_name").value, analyst_name: $("#analyst_name").value, port: num("port"), open_browser: $("#open_browser").checked,

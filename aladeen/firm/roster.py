@@ -70,6 +70,7 @@ PHASES: list[dict] = [
     {"id": "decision", "title": "CIO decision"},
     {"id": "compliance", "title": "Compliance"},
     {"id": "council", "title": "Independent council"},
+    {"id": "followup", "title": "Council follow-up"},
     {"id": "publish", "title": "Publication"},
 ]
 

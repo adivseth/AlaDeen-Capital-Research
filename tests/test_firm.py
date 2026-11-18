@@ -75,6 +75,7 @@ def test_rating_forced_to_bands(cfg, tmp_path):
 
 def test_no_revision_rounds_means_no_send_backs(cfg, tmp_path):
     cfg["cio_revision_rounds"] = 0
+    cfg["council_followup"] = False  # the follow-up has its own switch
     state, runner, _ = _run(cfg, tmp_path)
     assert not [c for c in runner.calls if c["agent"].endswith("_rev")]
     assert state["revisions"] == []
@@ -149,3 +150,57 @@ def test_prompts_contain_house_rules(cfg):
         kw = {"advisor": "The Contrarian"} if agent == "council_advisor" else {}
         text = system_for(agent, cfg, **kw)
         assert "Do not introduce new numbers" in text
+
+
+def test_council_gaps_go_back_to_desks_and_decision_is_resigned(cfg, tmp_path):
+    from aladeen.firm.schemas import CouncilVerdict
+
+    calls = {"review": 0}
+
+    def gappy(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            calls["review"] += 1
+            if "independent council found these gaps" in user:  # the follow-up review
+                out = out.model_copy(update={"reviews": [r.model_copy(update={
+                    "verdict": "revise" if r.desk == "business" else "accept", "notes": "Add the sector outlook."})
+                    for r in out.reviews]})
+        if schema is CouncilVerdict:
+            out = out.model_copy(update={"report_complete": False, "gaps_in_report": ["No sector outlook."]})
+        return out
+
+    runner = OfflineRunner(gappy)
+    state, _, ev = _run(cfg, tmp_path, runner)
+    assert {"desk": "business", "notes": "Add the sector outlook.", "round": "council"} in state["revisions"]
+    names = [c["agent"] for c in runner.calls]
+    assert names.count("cio_decision") == 2  # re-signed after the follow-up
+    assert names.index("council_chair") < names.index("business_rev")
+    assert "followup" in {e.get("phase") for e in ev.all() if e["type"] == "phase"}
+    assert state["final"]["rating"] == state["valuation"]["band_rating"]  # compliance ran again
+
+
+def test_complete_council_skips_followup(cfg, tmp_path):
+    from aladeen.firm.schemas import CouncilVerdict
+
+    def done(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is CouncilVerdict:
+            out = out.model_copy(update={"report_complete": True})
+        return out
+
+    state, runner, ev = _run(cfg, tmp_path, OfflineRunner(done))
+    assert [c["agent"] for c in runner.calls].count("cio_decision") == 1
+    assert "followup" not in {e.get("phase") for e in ev.all() if e["type"] == "phase"}
+
+
+def test_research_brief_reaches_cio_and_desks(cfg, tmp_path):
+    cfg["research_brief"] = "Always cover the ZEBRA factor."
+    seen = set()
+
+    def spy(name, schema, system, user):
+        if "ZEBRA factor" in user:
+            seen.add(name)
+        return demo_responder(name, schema, system, user)
+
+    _run(cfg, tmp_path, OfflineRunner(spy))
+    assert {"cio_mandate", "fundamentals", "news"} <= seen

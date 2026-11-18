@@ -11,6 +11,12 @@ First public release.
   analyst, bull/bear debate with CIO ruling and kill fact, Chief Risk Officer, CIO decision, compliance
   (rating bands and number audit), independent five-advisor council, publishing.
 - Providers: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter, Ollama, any OpenAI-compatible server.
+- Research brief in Settings (the owner's standing instructions, read by the CIO and every desk); wider desk
+  coverage: macro/micro factors, sector prospects and ancillary effects, services and customers, company history,
+  future prospects, analyst coverage with rationale (via Exa web research).
+- Council follow-up: when the council finds the research incomplete, the gaps go back to the desks and the CIO
+  re-signs the decision before publishing.
+- `/deep-dive <company>` command for Claude Code.
 - Optional backup data sources: Alpha Vantage (prices), Firecrawl and Exa (annual reports, concalls).
 - Data: Screener.in parser, Yahoo Finance prices, Google News RSS, BSE annual reports and concall transcripts,
   company logos.

@@ -85,3 +85,17 @@ def test_load_document_uses_fallback_when_download_fails():
     assert doc.error is None and doc.title == "Concall Q2 (read via Firecrawl)" and doc.pages == 3
     doc = load_document(Blocked(), "concall", "Concall Q2", "u", "Q2", "full", 10_000)
     assert "403" in doc.error
+
+
+def test_exa_search_and_web_material():
+    from aladeen.dataflows.factpack import FactPack
+    from aladeen.firm import context as cx
+
+    body = {"results": [{"title": "Broker initiates BUY", "url": "https://x", "publishedDate": "2026-11-01T00:00:00Z",
+                         "text": "Target 500 " * 300}]}
+    res = backups.exa_search("q", "k", session=Fake(Resp(body)))
+    assert res[0]["date"] == "2026-11-01" and len(res[0]["text"]) == 1500
+    fp = FactPack(ticker="T", yahoo_symbol="T.NS", exchange="NSE", as_of="2026-11-19", benchmark="^NSEI",
+                  web=[{"topic": "analysts", **res[0]}])
+    assert "Broker initiates BUY" in cx.web_md(fp, "analysts")
+    assert "needs an Exa key" in cx.web_md(fp, "sector")

@@ -171,23 +171,28 @@ class ResearchRun:
                 for r in to_revise:
                     self._done(r.desk, "Memo filed with CIO notes")
                 break
-
-            def redo(r):
-                self.ev.message("cio", r.desk, "Please revise: " + _short(r.notes, 200))
-                self._work(r.desk, "Revising memo: " + _short(r.notes, 120))
-                text, material = staff.write_memo(r.desk, self.runner, self.cfg, s["fp"], s["quant"],
-                                                  s["mandate"], revision_notes=r.notes, previous=s["memos"][r.desk])
-                self.ev.log(r.desk, "Revised memo submitted", _short(text, 900))
-                self.ev.agent(r.desk, "waiting", "Revised memo with the CIO")
-                return r, text, material
-
-            with ThreadPoolExecutor(max_workers=len(to_revise)) as ex:
-                for r, text, material in ex.map(redo, to_revise):
-                    s["revisions"].append({"desk": r.desk, "notes": r.notes, "round": round_no + 1})
-                    s["memos"][r.desk] = text
-                    s["materials"][r.desk] = material
+            self._revise(to_revise, round_no + 1)
         self.ev.agent("cio", "waiting", "Waiting for the valuation")
         self.ev.phase("review", "done")
+
+    def _revise(self, to_revise: list, round_label) -> None:
+        """Desks rewrite their memos in parallel from the CIO's notes."""
+        s = self.state
+
+        def redo(r):
+            self.ev.message("cio", r.desk, "Please revise: " + _short(r.notes, 200))
+            self._work(r.desk, "Revising memo: " + _short(r.notes, 120))
+            text, material = staff.write_memo(r.desk, self.runner, self.cfg, s["fp"], s["quant"],
+                                              s["mandate"], revision_notes=r.notes, previous=s["memos"][r.desk])
+            self.ev.log(r.desk, "Revised memo submitted", _short(text, 900))
+            self.ev.agent(r.desk, "waiting", "Revised memo with the CIO")
+            return r, text, material
+
+        with ThreadPoolExecutor(max_workers=len(to_revise)) as ex:
+            for r, text, material in ex.map(redo, to_revise):
+                s["revisions"].append({"desk": r.desk, "notes": r.notes, "round": round_label})
+                s["memos"][r.desk] = text
+                s["materials"][r.desk] = material
 
     def _valuation(self) -> None:
         self.ev.phase("valuation")
@@ -323,6 +328,37 @@ class ResearchRun:
             self.ev.agent("council", "error", f"Council could not complete: {_short(str(e), 160)}")
         self.ev.phase("council", "done")
 
+    def _followup(self) -> None:
+        """If the council says the research is incomplete, the CIO sends its gaps to the desks once and re-signs."""
+        s = self.state
+        cv = (s.get("council") or {}).get("verdict") or {}
+        if not self.cfg.get("council_followup", True) or not cv or cv.get("report_complete", True):
+            return
+        self.ev.phase("followup")
+        gaps = cv.get("gaps_in_report") or []
+        self.ev.message("council", "cio", "The research is not complete: " + _short("; ".join(gaps), 300))
+        self._work("cio", "Deciding which desks must close the council's gaps")
+        notes = ("## The independent council found these gaps. Send a desk back only if its memo must change "
+                 "to close a gap; accept the rest.\n" + "\n".join(f"- {g}" for g in gaps))
+        review = staff.cio_review(self.runner, self.cfg, s["mandate"], s["memos"], notes)
+        to_revise = [r for r in review.reviews if r.verdict == "revise" and r.desk in s["memos"]]
+        if not to_revise:
+            self.ev.log("cio", "No desk memo needs to change for the council's gaps; they are disclosed in the report.")
+        else:
+            self._revise(to_revise, "council")
+            for r in to_revise:
+                self._done(r.desk, "Council gap closed")
+            revised = staff.memos_md(s["memos"], tuple(r.desk for r in to_revise))
+            self._work("cio", "Re-signing the decision with the revised memos")
+            final = staff.cio_decide(self.runner, self.cfg, s["debate_material"] + "\n\n## Memos revised after "
+                                     "the council\n" + revised, s["debate_verdict"], s["risk_review"],
+                                     self.audit_md(s["audit"]))
+            s["final"] = final.model_dump()
+            self.ev.log("cio", f"Decision re-signed after the council follow-up: {final.rating}. {final.headline}")
+            self._compliance()  # bands and number audit again on the new decision
+        self._done("cio", "Decision signed")
+        self.ev.phase("followup", "done")
+
     def _publish(self) -> None:
         from aladeen.report.render import log_call, save_outputs
 
@@ -355,7 +391,7 @@ class ResearchRun:
         steps = [self._data, self._mandate, self._desks, self._review, self._valuation, self._debate, self._risk,
                  self._decision, self._compliance]
         if self.cfg.get("run_council", True):
-            steps.append(self._council)
+            steps += [self._council, self._followup]
         steps.append(self._publish)
         try:
             self._preflight()

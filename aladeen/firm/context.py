@@ -215,6 +215,20 @@ def news_md(fp: FactPack, limit: int = 30) -> str:
     return "\n".join(lines)
 
 
+WEB_TITLES = {"analysts": "Web research: analyst coverage", "sector": "Web research: sector and macro outlook",
+              "history": "Web research: company history and events"}
+
+
+def web_md(fp: FactPack, topic: str) -> str:
+    items = [w for w in fp.web if w.get("topic") == topic]
+    if not items:
+        return f"## {WEB_TITLES[topic]}\n_none retrieved (web research needs an Exa key in Settings)_"
+    out = [f"## {WEB_TITLES[topic]} (third-party web pages; verify before relying on them)"]
+    for w in items:
+        out.append(f"### {w['title']} — {w['date'] or 'undated'}\n{w['url']}\n{w['text']}")
+    return "\n\n".join(out)
+
+
 def documents_index_md(fp: FactPack) -> str:
     d = fp.screener.get("documents", {})
     lines = ["## Documents"]
