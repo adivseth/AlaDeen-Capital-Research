@@ -20,11 +20,22 @@ code, reconciled and audited. If an agent writes a number it was not given, the 
 ```bash
 git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
 cd AlaDeen-Capital-Research
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 aladeen demo        # watch the firm research a synthetic company — no API key needed
 aladeen TCS         # research TCS (add your API key in Settings first)
+```
+
+**Windows (PowerShell)** — run one line at a time:
+
+```powershell
+git clone https://github.com/adivseth/AlaDeen-Capital-Research.git
+cd AlaDeen-Capital-Research
+python -m venv .venv
+.venv\Scripts\Activate.ps1      # if "running scripts is disabled": Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+pip install -e .
+aladeen demo
 ```
 
 Python 3.11+ is required. On first use, open **Settings** in the dashboard, pick an AI provider and paste its
