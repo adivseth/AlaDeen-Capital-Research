@@ -83,8 +83,8 @@ async function renderHome() {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   view.innerHTML = `
+  <div class="homebanner"><img src="/static/banner.jpg" alt="AlaDeen Capital Research"></div>
   <div class="hero">
-    <div class="deco">🧭</div>
     <h1>What should the firm research today?</h1>
     <p>Name an NSE or BSE company. The CIO will brief the research desks, review their work, run the bull-vs-bear debate and the risk office, and sign an institutional-grade report. You can watch every step in the live office.</p>
     <form id="newform">
