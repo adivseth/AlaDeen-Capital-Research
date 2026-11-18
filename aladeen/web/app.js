@@ -429,8 +429,8 @@ async function renderSettings() {
   <div class="settings"><div class="toc"><a href="#s-models" data-jump>🧠 AI models</a><a href="#s-keys" data-jump>🔑 API keys</a><a href="#s-brief" data-jump>📝 Research brief</a><a href="#s-team" data-jump>👥 Research team</a><a href="#s-data" data-jump>🗄️ Data</a><a href="#s-val" data-jump>🧮 Valuation</a><a href="#s-brand" data-jump>🏷️ Report &amp; dashboard</a><a href="#s-store" data-jump>📁 Storage</a></div>
   <form id="sform">
   <section class="card" id="s-models"><h3>🧠 AI models</h3>
-    <div class="row2"><div class="field"><label class="f">Provider</label><select id="llm_provider">${provOpts}</select><div class="hint">Claude, OpenAI, Gemini, Grok, OpenRouter, a local Ollama model or any OpenAI-compatible server.</div></div>
-    <div class="field" id="burl"><label class="f">Server URL</label><input id="backend_url" value="${esc(v.backend_url || "")}" placeholder="http://localhost:11434/v1"><div class="hint">Only for Ollama or OpenAI-compatible servers.</div></div></div>
+    <div class="row2"><div class="field"><label class="f">Provider</label><select id="llm_provider">${provOpts}</select><div class="hint">Direct: Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, Qwen, Mistral, GLM, Llama, MiMo. Or OpenRouter, a local Ollama model, or any OpenAI-compatible server.</div></div>
+    <div class="field" id="burl"><label class="f">Server URL</label><input id="backend_url" value="${esc(v.backend_url || "")}" placeholder="http://localhost:11434/v1"><div class="hint" id="burlhint"></div></div></div>
     <div class="row2"><div class="field"><label class="f">Senior model — CIO, Valuation, Chief Risk Officer</label><input id="deep_think_llm" value="${esc(v.deep_think_llm)}" list="models"></div>
     <div class="field"><label class="f">Analyst model — research desks, advocates, council</label><input id="quick_think_llm" value="${esc(v.quick_think_llm)}" list="models"></div></div>
     <datalist id="models">${s.providers.flatMap((p) => [p.deep, p.quick]).filter(Boolean).map((m) => `<option value="${esc(m)}">`).join("")}</datalist>
@@ -482,7 +482,15 @@ async function renderSettings() {
   <section class="card" id="s-store"><h3>📁 Storage</h3><div class="small">Research archive: <code>${esc(s.paths.research)}</code><br>Call log: <code>${esc(s.paths.call_log)}</code><br>App folder: <code>${esc(s.paths.home)}</code></div></section>
   <div class="savebar"><button class="btn" type="button" id="reset">Discard changes</button><button class="btn primary" type="submit">Save settings</button></div>
   </form></div>`;
-  const syncUrl = () => ($("#burl").style.opacity = ["ollama", "openai_compatible"].includes($("#llm_provider").value) ? "1" : ".45");
+  const REGIONAL = ["deepseek", "moonshot", "qwen", "mistral", "zai", "meta", "xiaomi"];
+  const syncUrl = () => {
+    const p = $("#llm_provider").value;
+    const needed = ["ollama", "openai_compatible"].includes(p), optional = REGIONAL.includes(p);
+    $("#burl").style.opacity = needed || optional ? "1" : ".45";
+    $("#burlhint").textContent = needed ? "Required: your server's address."
+      : optional ? "Optional. Leave empty for the official global endpoint; set it only for another region (e.g. China)."
+      : "Not used for this provider.";
+  };
   $("#llm_provider").onchange = () => {
     const p = s.providers.find((x) => x.id === $("#llm_provider").value);
     if (p && p.deep) { $("#deep_think_llm").value = p.deep; $("#quick_think_llm").value = p.quick; }

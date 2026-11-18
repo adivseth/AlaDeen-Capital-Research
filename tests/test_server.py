@@ -9,9 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import aladeen.demo as demo_mod
+from aladeen.config import PROVIDER_KEY_ENV  # noqa: E402
 from aladeen.server.app import create_app
 
-KEY_ENVS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY")
+KEY_ENVS = tuple(PROVIDER_KEY_ENV.values())
 
 
 @pytest.fixture
@@ -123,3 +124,24 @@ def test_missing_key_fails_fast_with_settings_hint(client):
     assert rec["status"] == "error" and "Settings" in rec["error"]
     last = client.get(f"/api/runs/{run_id}/events", params={"since": 0, "wait": 0}).json()["events"][-1]
     assert last["type"] == "error"
+
+
+@pytest.mark.parametrize("provider,url", [
+    ("deepseek", "https://api.deepseek.com"), ("moonshot", "https://api.moonshot.ai/v1"),
+    ("qwen", "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"), ("mistral", "https://api.mistral.ai/v1"),
+    ("zai", "https://api.z.ai/api/paas/v4"), ("meta", "https://api.llama.com/compat/v1"),
+    ("xiaomi", "https://api.xiaomimimo.com/v1"),
+])
+def test_direct_provider_presets(provider, url, tmp_path):
+    from aladeen.config import load_config
+    from aladeen.llm import make_chat_model
+
+    cfg = load_config({"home_dir": str(tmp_path)}, use_env=False)
+    cfg["api_keys"] = {provider: "test-key"}
+    m = make_chat_model(provider, "some-model", cfg)  # builds the client only; no network call
+    assert m.openai_api_base == url
+    cfg["backend_url"] = "https://example.invalid/v1"  # regional override
+    assert make_chat_model(provider, "some-model", cfg).openai_api_base == "https://example.invalid/v1"
+    cfg["api_keys"] = {}
+    with pytest.raises(RuntimeError, match="Settings"):
+        make_chat_model(provider, "some-model", {**cfg, "backend_url": None})

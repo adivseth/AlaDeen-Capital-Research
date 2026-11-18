@@ -17,17 +17,13 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from aladeen.config import PROVIDER_IDS
+from aladeen.config import PROVIDER_BASE_URL, PROVIDER_IDS, PROVIDER_KEY_ENV
 
 T = TypeVar("T", bound=BaseModel)
 
 PROVIDERS = PROVIDER_IDS
-_KEY_ENV = {
-    "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
-    "xai": "XAI_API_KEY", "openrouter": "OPENROUTER_API_KEY",
-}
-_BASE_URL = {"xai": "https://api.x.ai/v1", "openrouter": "https://openrouter.ai/api/v1",
-             "ollama": "http://localhost:11434/v1"}
+_KEY_ENV = PROVIDER_KEY_ENV
+_BASE_URL = PROVIDER_BASE_URL
 
 
 class Runner(Protocol):

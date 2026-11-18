@@ -10,7 +10,8 @@ First public release.
 - CIO-led research firm: mandate, six research desks in parallel, CIO review with send-backs, valuation
   analyst, bull/bear debate with CIO ruling and kill fact, Chief Risk Officer, CIO decision, compliance
   (rating bands and number audit), independent five-advisor council, publishing.
-- Providers: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter, Ollama, any OpenAI-compatible server.
+- Providers: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, DeepSeek, Moonshot (Kimi), Alibaba Qwen, Mistral,
+  Z.ai (GLM), Meta Llama API, Xiaomi MiMo (direct), OpenRouter, Ollama, any OpenAI-compatible server.
 - Research brief in Settings (the owner's standing instructions, read by the CIO and every desk); wider desk
   coverage: macro/micro factors, sector prospects and ancillary effects, services and customers, company history,
   future prospects, analyst coverage with rationale (via Exa web research).

@@ -110,7 +110,7 @@ If `git pull` says your local changes would be overwritten (for example, you edi
 | **Report** | The finished report inside the dashboard, with **PDF** (browser print → Save as PDF) and **HTML** downloads, the full research file, and the raw data. |
 | **Research archive** | Every research you have run, searchable by company and rating. Open, re-download or delete. |
 | **Call log** | Every published rating; **Score my calls** updates prices and reports hit rate and alpha vs the Nifty 50. |
-| **Settings** | AI provider and models (Claude, OpenAI, Gemini, Grok, OpenRouter, Ollama or any OpenAI-compatible server), API keys, which desks to use, revision and debate rounds, council on/off, document reading, valuation inputs, report branding. |
+| **Settings** | AI provider and models (see [AI providers](#ai-providers)), API keys, which desks to use, revision and debate rounds, council on/off, document reading, valuation inputs, report branding. |
 
 Everything stays on your computer: settings in `~/.aladeen/settings.json` (readable only by you), research in
 `~/.aladeen/research/`, the archive in `~/.aladeen/aladeen.db`.
@@ -160,6 +160,34 @@ report.
 
 A full research makes about 29 AI calls (more when annual reports are read). Turn off the council or reduce
 the desks in Settings to save cost.
+
+## AI providers
+
+Pick one in Settings → AI models, paste its API key, and type the provider's model names (only Claude's are
+pre-filled). The senior model runs the CIO, Valuation Analyst and Chief Risk Officer; the analyst model runs
+the desks, advocates and council. Each tier can use a different provider.
+
+| Provider | Connection | Key (Settings or env var) |
+|---|---|---|
+| Anthropic Claude (default) | direct | `ANTHROPIC_API_KEY` |
+| OpenAI | direct | `OPENAI_API_KEY` |
+| Google Gemini | direct | `GOOGLE_API_KEY` |
+| xAI Grok | direct | `XAI_API_KEY` |
+| DeepSeek | direct (`api.deepseek.com`) | `DEEPSEEK_API_KEY` |
+| Moonshot AI — Kimi | direct (`api.moonshot.ai/v1`) | `MOONSHOT_API_KEY` |
+| Alibaba Qwen — Model Studio | direct (Singapore endpoint) | `DASHSCOPE_API_KEY` |
+| Mistral AI | direct (`api.mistral.ai/v1`) | `MISTRAL_API_KEY` |
+| Z.ai — GLM | direct (`api.z.ai/api/paas/v4`) | `ZAI_API_KEY` |
+| Meta Llama API | direct (`api.llama.com/compat/v1`) | `LLAMA_API_KEY` |
+| Xiaomi MiMo | direct (`api.xiaomimimo.com/v1`) | `MIMO_API_KEY` |
+| OpenRouter | one key, many models | `OPENROUTER_API_KEY` |
+| Ollama | models on your own computer | none |
+| Any OpenAI-compatible server | your server URL | optional |
+
+The providers marked "direct" with an address use that provider's official OpenAI-compatible endpoint. For a
+different region (for example China endpoints of Kimi, Qwen or GLM), put that region's address in **Server
+URL** in Settings. Use **Test senior model** / **Test analyst model** to check a key before a research. Use a
+strong model for the senior tier: the CIO must return structured outputs that small models often get wrong.
 
 ## The report
 

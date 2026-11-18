@@ -12,7 +12,27 @@ import os
 from pathlib import Path
 from typing import Any
 
-PROVIDER_IDS = ("anthropic", "openai", "google", "xai", "openrouter", "ollama", "openai_compatible")
+# Direct providers. OpenAI-compatible ones are reached at the official base URL below
+# (each taken from the provider's own API docs); "Server URL" in Settings overrides it, e.g. for another region.
+PROVIDER_KEY_ENV = {
+    "anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
+    "xai": "XAI_API_KEY", "deepseek": "DEEPSEEK_API_KEY", "moonshot": "MOONSHOT_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY", "mistral": "MISTRAL_API_KEY", "zai": "ZAI_API_KEY", "meta": "LLAMA_API_KEY",
+    "xiaomi": "MIMO_API_KEY", "openrouter": "OPENROUTER_API_KEY",
+}
+PROVIDER_BASE_URL = {
+    "xai": "https://api.x.ai/v1",
+    "deepseek": "https://api.deepseek.com",
+    "moonshot": "https://api.moonshot.ai/v1",  # China: https://api.moonshot.cn/v1
+    "qwen": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",  # Singapore; US/China endpoints differ
+    "mistral": "https://api.mistral.ai/v1",
+    "zai": "https://api.z.ai/api/paas/v4",  # China: https://open.bigmodel.cn/api/paas/v4
+    "meta": "https://api.llama.com/compat/v1",  # Llama API's OpenAI-compatibility endpoint
+    "xiaomi": "https://api.xiaomimimo.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "ollama": "http://localhost:11434/v1",
+}
+PROVIDER_IDS = (*PROVIDER_KEY_ENV, "ollama", "openai_compatible")
 DESKS = ["fundamentals", "business", "governance", "filings", "news", "technical"]
 
 DEFAULT_CONFIG: dict[str, Any] = {

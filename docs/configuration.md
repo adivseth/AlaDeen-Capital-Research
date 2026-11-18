@@ -29,11 +29,11 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 
 | Key | Env | Default |
 |---|---|---|
-| `llm_provider` | `ALADEEN_LLM_PROVIDER` | `anthropic` |
+| `llm_provider` | `ALADEEN_LLM_PROVIDER` | `anthropic` (see README → AI providers for all 14 options) |
 | `deep_think_llm` | `ALADEEN_DEEP_MODEL` | `claude-opus-5-5` |
 | `quick_think_llm` | `ALADEEN_QUICK_MODEL` | `claude-sonnet-5-5` |
 | `deep_provider`, `quick_provider` | `ALADEEN_DEEP_PROVIDER`, `ALADEEN_QUICK_PROVIDER` | same as `llm_provider` |
-| `backend_url` | `ALADEEN_BACKEND_URL` | provider default |
+| `backend_url` | `ALADEEN_BACKEND_URL` | provider default (set it to use another region, e.g. a China endpoint) |
 | `temperature` | `ALADEEN_TEMPERATURE` | 0.2 (dropped automatically for models that reject it) |
 | `max_tokens` | `ALADEEN_MAX_TOKENS` | 8000 |
 

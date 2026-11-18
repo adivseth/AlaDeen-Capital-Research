@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 
 from aladeen import __version__
-from aladeen.config import DESKS, EDITABLE, load_config, read_settings, settings_path
+from aladeen.config import DESKS, EDITABLE, PROVIDER_KEY_ENV, load_config, read_settings, settings_path
 from aladeen.dataflows import backups
 from aladeen.firm.roster import roster_payload
 from aladeen.server.runs import RunManager
@@ -26,6 +26,13 @@ PROVIDERS = [
     {"id": "openai", "label": "OpenAI", "key": True},
     {"id": "google", "label": "Google Gemini", "key": True},
     {"id": "xai", "label": "xAI Grok", "key": True},
+    {"id": "deepseek", "label": "DeepSeek", "key": True},
+    {"id": "moonshot", "label": "Moonshot AI (Kimi)", "key": True},
+    {"id": "qwen", "label": "Alibaba Qwen (Model Studio)", "key": True},
+    {"id": "mistral", "label": "Mistral AI", "key": True},
+    {"id": "zai", "label": "Z.ai (GLM)", "key": True},
+    {"id": "meta", "label": "Meta Llama API", "key": True},
+    {"id": "xiaomi", "label": "Xiaomi MiMo", "key": True},
     {"id": "openrouter", "label": "OpenRouter", "key": True},
     {"id": "ollama", "label": "Ollama (local)", "key": False},
     {"id": "openai_compatible", "label": "OpenAI-compatible server", "key": False},
@@ -38,8 +45,7 @@ DATA_SOURCES = [
     {"id": "exa", "label": "Exa", "use": "Web research (analyst coverage, sector outlook, company history) and a second "
      "backup for reading annual reports and concalls"},
 ]
-KEY_ENVS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
-            "xai": "XAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", **backups.KEY_ENV}
+KEY_ENVS = {**PROVIDER_KEY_ENV, **backups.KEY_ENV}
 
 
 def _write_private(path: Path, text: str) -> None:
