@@ -117,6 +117,11 @@ save to the archive).
 | BSE (via Screener links) | Annual reports, concall transcripts | BSE may block automated downloads from some networks; the report then says which documents could not be read. |
 | Google News RSS | Headlines | Headlines only; never treated as facts about financials. |
 
+**Backup data sources (optional).** Add keys in Settings → Backup data sources and the app uses them only when
+the primary source fails: **Alpha Vantage** for price history when Yahoo Finance fails (a free key may return only
+the last 100 trading days), and **Firecrawl** then **Exa** to read annual reports and concall transcripts when BSE
+blocks the download. The report says when a backup was used.
+
 Market inputs are dated defaults — check them in Settings before relying on a valuation: risk-free rate
 7.22% (RBI-reported 10Y G-Sec yield, 11-Nov-2026), India equity risk premium 7.0%. See
 [docs/configuration.md](docs/configuration.md).

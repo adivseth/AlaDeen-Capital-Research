@@ -11,6 +11,7 @@ First public release.
   analyst, bull/bear debate with CIO ruling and kill fact, Chief Risk Officer, CIO decision, compliance
   (rating bands and number audit), independent five-advisor council, publishing.
 - Providers: Anthropic Claude, OpenAI, Google Gemini, xAI Grok, OpenRouter, Ollama, any OpenAI-compatible server.
+- Optional backup data sources: Alpha Vantage (prices), Firecrawl and Exa (annual reports, concalls).
 - Data: Screener.in parser, Yahoo Finance prices, Google News RSS, BSE annual reports and concall transcripts,
   company logos.
 - Quant engine: reconciliation checks, CAGRs, TTM, technical indicators and 10-year charts, FCFF DCF with

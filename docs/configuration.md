@@ -57,5 +57,8 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 | `gsheets_credentials` | `ALADEEN_GSHEETS_CREDENTIALS` | none |
 | `port` / `host` | `ALADEEN_PORT` / `ALADEEN_HOST` | 8765 / 127.0.0.1 |
 
+Backup data sources (optional): `ALPHAVANTAGE_API_KEY`, `FIRECRAWL_API_KEY`, `EXA_API_KEY`, or the same keys in
+Settings → Backup data sources. They are used only when Yahoo Finance or a BSE document download fails.
+
 API keys entered in Settings are stored in `~/.aladeen/settings.json` (created with mode 600). Keys in the
 environment or `.env` also work; a key saved in Settings takes precedence.

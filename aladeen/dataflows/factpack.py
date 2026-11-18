@@ -15,10 +15,10 @@ from typing import Any
 
 import pandas as pd
 
+from aladeen.dataflows import backups, yahoo
 from aladeen.dataflows import documents as docs_mod
 from aladeen.dataflows import logo as logo_mod
 from aladeen.dataflows import news as news_mod
-from aladeen.dataflows import yahoo
 from aladeen.dataflows.http import DataUnavailable, Http
 from aladeen.dataflows.screener import ScreenerClient
 from aladeen.dataflows.symbols import Symbol, normalize
@@ -131,9 +131,18 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
         fp.sources.append({"name": f"Yahoo Finance daily prices ({sym.yahoo})",
                            "url": f"https://finance.yahoo.com/quote/{sym.yahoo}/history"})
     except DataUnavailable as e:
-        fp.warn(f"Yahoo prices unavailable ({e}); trying Screener price history.")
+        fp.warn(f"Yahoo prices unavailable ({e}).")
+        av_key = backups.key(cfg, "alphavantage")
+        if av_key:
+            progress("Alpha Vantage: backup price history")
+            try:
+                fp.prices, note = backups.alpha_vantage_daily(sym.base, as_of, av_key)
+                fp.sources.append({"name": f"{note} daily prices", "url": "https://www.alphavantage.co/"})
+                fp.warn(f"Prices from the backup source: {note}.")
+            except (DataUnavailable, ValueError, OSError) as e2:
+                fp.warn(f"Alpha Vantage prices unavailable: {e2}")
         cid = fp.screener.get("company_id")
-        if cid:
+        if cid and (fp.prices is None or fp.prices.empty):
             try:
                 ch = sc.price_history(cid, days=int(365.25 * cfg["history_years"]))
                 df = pd.DataFrame({"close": ch["close"], "volume": ch["volume"]},
@@ -183,7 +192,8 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
         progress("Filings: annual reports and concall transcripts")
         docs = docs_mod.collect(http, sc_["documents"], cfg["max_annual_reports"],
                                 cfg["max_concall_transcripts"], cfg["document_mode"],
-                                cfg["document_char_budget"])
+                                cfg["document_char_budget"],
+                                fallback=lambda url: backups.document_text(url, cfg))
         for d in docs:
             rec = d.as_dict()
             rec["text"] = d.text

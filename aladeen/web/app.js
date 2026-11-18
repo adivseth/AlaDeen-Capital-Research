@@ -417,11 +417,13 @@ async function renderSettings() {
   const P = (x) => (x == null ? "" : +(x * 100).toFixed(3));
   const provOpts = s.providers.map((p) => `<option value="${p.id}" ${p.id === v.llm_provider ? "selected" : ""}>${esc(p.label)}</option>`).join("");
   const tierOpts = (cur) => `<option value="">Same as main provider</option>` + s.providers.map((p) => `<option value="${p.id}" ${p.id === cur ? "selected" : ""}>${esc(p.label)}</option>`).join("");
-  const keyRows = s.providers.filter((p) => p.key).map((p) => {
+  const keyRow = (p) => {
     const k = s.keys[p.id] || {};
-    return `<div class="keyrow"><b>${esc(p.label)}</b><input type="password" data-key="${p.id}" placeholder="${k.set ? "Saved — leave blank to keep" : "Paste API key"}" autocomplete="off">
+    return `<div class="keyrow"><b>${esc(p.label)}${p.use ? `<div class="hint" style="font-weight:400">${esc(p.use)}</div>` : ""}</b><input type="password" data-key="${p.id}" placeholder="${k.set ? "Saved — leave blank to keep" : "Paste API key"}" autocomplete="off">
       <span class="state">${k.set ? `<span class="pill done">${esc(k.masked)}</span> <span class="muted tiny">${esc(k.source)}</span> ${k.source === "dashboard" ? `<button class="btn ghost danger" data-clear="${p.id}" type="button">Remove</button>` : ""}` : '<span class="pill demo">Not set</span>'}</span></div>`;
-  }).join("");
+  };
+  const keyRows = s.providers.filter((p) => p.key).map(keyRow).join("");
+  const dataKeyRows = (s.data_sources || []).map(keyRow).join("");
   const desks = s.desks.map((d) => { const a = agentMeta(d); return `<label><input type="checkbox" data-desk="${d}" ${v.desks.includes(d) ? "checked" : ""}> ${a.icon} ${esc(a.title)}</label>`; }).join("");
   view.innerHTML = `<div class="page-head"><div><h1>Settings</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
   <div class="settings"><div class="toc"><a href="#s-models" data-jump>🧠 AI models</a><a href="#s-keys" data-jump>🔑 API keys</a><a href="#s-team" data-jump>👥 Research team</a><a href="#s-data" data-jump>🗄️ Data</a><a href="#s-val" data-jump>🧮 Valuation</a><a href="#s-brand" data-jump>🏷️ Report &amp; dashboard</a><a href="#s-store" data-jump>📁 Storage</a></div>
@@ -439,7 +441,8 @@ async function renderSettings() {
     <div class="field"><label class="f">Report language</label><input id="output_language" value="${esc(v.output_language)}"></div></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" data-test="deep">Test senior model</button><button class="btn" type="button" data-test="quick">Test analyst model</button><span class="small muted" id="testout">Save first, then test.</span></div>
   </section>
-  <section class="card" id="s-keys"><h3>🔑 API keys</h3>${keyRows}<div class="hint">Keys entered here are stored in your settings file (readable only by you). Keys in your environment or <code>.env</code> also work.</div></section>
+  <section class="card" id="s-keys"><h3>🔑 API keys</h3>${keyRows}
+    <h3 style="margin-top:18px">🛟 Backup data sources <span class="muted small" style="font-weight:400">optional</span></h3>${dataKeyRows}<div class="hint">Keys entered here are stored in your settings file (readable only by you). Keys in your environment or <code>.env</code> also work.</div></section>
   <section class="card" id="s-team"><h3>👥 Research team</h3>
     <label class="f">Research desks the CIO can brief</label><div class="desk-check" style="margin-bottom:14px">${desks}</div>
     <div class="row3"><div class="field"><label class="f">CIO revision rounds</label><input id="cio_revision_rounds" type="number" min="0" max="3" value="${v.cio_revision_rounds}"><div class="hint">How many times the CIO may send memos back.</div></div>

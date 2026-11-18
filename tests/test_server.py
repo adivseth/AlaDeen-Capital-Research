@@ -70,6 +70,14 @@ def test_settings_roundtrip_and_key_masking(client):
     assert not out["keys"]["openai"]["set"]
 
 
+def test_backup_source_keys(client):
+    s = client.get("/api/settings").json()
+    assert [d["id"] for d in s["data_sources"]] == ["alphavantage", "firecrawl", "exa"]
+    out = client.put("/api/settings", json={"api_keys": {"firecrawl": "fc-abcdefghijkl1234"}}).json()
+    assert out["keys"]["firecrawl"]["set"] and "fc-abcdefghijkl" not in json.dumps(out)
+    assert client.put("/api/settings", json={"api_keys": {"evil": "x"}}).status_code == 400
+
+
 def test_bad_settings_rejected(client):
     assert client.put("/api/settings", json={"values": {"desks": ["astrology"]}}).status_code == 400
     assert client.put("/api/settings", json={"values": {"llm_provider": "nope"}}).status_code == 400

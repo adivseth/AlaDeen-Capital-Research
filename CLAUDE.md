@@ -16,6 +16,19 @@ research, value or track an Indian stock, use the tools here rather than computi
 3. **Quarterly update:** `aladeen track TICKER` (short-term check, announcements, prior call, kill fact).
 4. **"Score my calls":** `aladeen score`, then report the hit rate and alpha by rating.
 
+## When you run inside Claude with connectors
+
+If the session has these connectors, prefer them to the app's own fetchers and say which source each figure came from:
+
+- **INDmoney** (`lookup_ind_keys` → `get_indian_stocks_ohlc` / `get_indian_stocks_details`): prices, the Nifty 50
+  series (ind_key `INDI00012`), analyst targets and news. Cross-check against `factpack.json` and note mismatches.
+- **Alpha Vantage**: backup prices and index series when Yahoo is blocked.
+- **Firecrawl / Exa**: read Screener, BSE annual reports and concall PDFs when a direct fetch fails.
+- **Google Sheets**: if the user has a call-log sheet, read it for earlier calls and lessons before the research,
+  and add the new call (date, rating, target, close, Nifty 50 close) after it. Never overwrite formula columns.
+
+Outside Claude, the app uses its own optional backups instead (Settings → Backup data sources).
+
 ## Rules
 
 - Never do arithmetic in prose. Every figure comes from the fact pack or the valuation engine. If you need a

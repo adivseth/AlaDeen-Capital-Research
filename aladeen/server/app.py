@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 
 from aladeen import __version__
 from aladeen.config import DESKS, EDITABLE, load_config, read_settings, settings_path
+from aladeen.dataflows import backups
 from aladeen.firm.roster import roster_payload
 from aladeen.server.runs import RunManager
 
@@ -29,6 +30,15 @@ PROVIDERS = [
     {"id": "ollama", "label": "Ollama (local)", "key": False},
     {"id": "openai_compatible", "label": "OpenAI-compatible server", "key": False},
 ]
+
+
+DATA_SOURCES = [
+    {"id": "alphavantage", "label": "Alpha Vantage", "use": "Backup price history when Yahoo Finance fails"},
+    {"id": "firecrawl", "label": "Firecrawl", "use": "Reads annual reports and concalls when BSE blocks the download"},
+    {"id": "exa", "label": "Exa", "use": "Second backup for reading annual reports and concalls"},
+]
+KEY_ENVS = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
+            "xai": "XAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", **backups.KEY_ENV}
 
 
 def _write_private(path: Path, text: str) -> None:
@@ -69,16 +79,14 @@ def create_app(home_dir: str | None = None) -> FastAPI:
     @app.get("/api/settings")
     def get_settings():
         cfg = mgr.config()
-        env_keys = {"anthropic": "ANTHROPIC_API_KEY", "openai": "OPENAI_API_KEY", "google": "GOOGLE_API_KEY",
-                    "xai": "XAI_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
         keys = {}
-        for pid, env in env_keys.items():
+        for pid, env in KEY_ENVS.items():
             saved = cfg["api_keys"].get(pid)
             keys[pid] = {"set": bool(saved or os.environ.get(env)),
                          "source": "dashboard" if saved else ("environment" if os.environ.get(env) else None),
                          "masked": _mask(saved) if saved else (_mask(os.environ[env]) if os.environ.get(env) else "")}
         return {"values": {k: cfg.get(k) for k in EDITABLE}, "keys": keys, "providers": PROVIDERS,
-                "desks": DESKS, "paths": {"home": cfg["home_dir"], "research": cfg["results_dir"],
+                "data_sources": DATA_SOURCES, "desks": DESKS, "paths": {"home": cfg["home_dir"], "research": cfg["results_dir"],
                                           "call_log": cfg["call_log_path"], "settings": str(settings_path(cfg["home_dir"]))}}
 
     @app.put("/api/settings")
@@ -90,6 +98,8 @@ def create_app(home_dir: str | None = None) -> FastAPI:
                 saved[k] = v
         keys = dict(saved.get("api_keys") or {})
         for pid, v in (payload.get("api_keys") or {}).items():
+            if pid not in KEY_ENVS:
+                raise HTTPException(400, f"Unknown key {pid!r}")
             if v:
                 keys[pid] = v.strip()
         for pid in payload.get("clear_keys") or []:

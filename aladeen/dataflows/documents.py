@@ -81,13 +81,23 @@ def select_pages(pages: list[str], budget: int) -> tuple[str, list[int]]:
 
 
 def load_document(http: Http, kind: str, title: str, url: str, period: str | None,
-                  mode: str, budget: int) -> Document:
+                  mode: str, budget: int, fallback=None) -> Document:
+    """``fallback(url) -> (text, source)`` is tried when the direct download fails (e.g. BSE blocks it)."""
     doc = Document(kind=kind, title=title, url=url, period=period)
     try:
         pages = extract_pages(http.get(url, binary=True))
     except Exception as e:
-        doc.error = str(e)
-        return doc
+        if fallback is None:
+            doc.error = str(e)
+            return doc
+        try:
+            text, source = fallback(url)
+        except Exception as e2:  # noqa: BLE001
+            doc.error = f"{e}; backup: {e2}"
+            return doc
+        # shortcut: backup text has no page breaks, so 4,000-character chunks stand in for pages
+        pages = [text[i:i + 4000] for i in range(0, len(text), 4000)]
+        doc.title = f"{title} (read via {source})"
     doc.pages = len(pages)
     if kind == "annual_report" and mode == "focused":
         doc.text, doc.selected_pages = select_pages(pages, budget)
@@ -99,14 +109,14 @@ def load_document(http: Http, kind: str, title: str, url: str, period: str | Non
 
 
 def collect(http: Http, documents: dict, max_annual: int, max_concalls: int, mode: str,
-            budget: int) -> list[Document]:
+            budget: int, fallback=None) -> list[Document]:
     out: list[Document] = []
     ars = sorted(documents.get("annual_reports", []), key=lambda d: d.get("year") or 0, reverse=True)
     for ar in ars[:max_annual]:
         out.append(load_document(http, "annual_report", ar["title"], ar["url"],
-                                 str(ar.get("year")), mode, budget))
+                                 str(ar.get("year")), mode, budget, fallback))
     calls = [c for c in documents.get("concalls", []) if c.get("transcript")]
     for c in calls[:max_concalls]:
         out.append(load_document(http, "concall", f"Concall transcript {c.get('period')}",
-                                 c["transcript"], c.get("period"), mode, budget))
+                                 c["transcript"], c.get("period"), mode, budget, fallback))
     return out
