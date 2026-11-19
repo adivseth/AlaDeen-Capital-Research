@@ -354,7 +354,7 @@ def transcript_md(state: dict) -> str:
 
 def _jsonable(state: dict) -> dict:
     keep = ["ticker", "as_of", "memos", "revisions", "assumptions", "debate", "final", "rating_check", "council",
-            "audit", "errors", "prior_calls", "call_id"]
+            "audit", "errors", "prior_calls", "call_id", "valuation_revisions"]
     out = {k: state.get(k) for k in keep}
     for k in ("mandate", "desk_review", "debate_verdict", "risk_review"):
         out[k] = _plain(state.get(k))

@@ -313,7 +313,12 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
     {% for c in v.graham.checklist %}<tr><td class="l">{{ c.criterion }}</td><td>{{ c.value }}</td><td>{% if c['pass'] is none %}<span class="pill na">n/a</span>{% elif c['pass'] %}<span class="pill ok">Pass</span>{% else %}<span class="pill bad">Fail</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
   <div class="box info"><h4>Valuation conclusion</h4>At CMP {{ mk.cmp|inr }}, the probability-weighted value today is {{ v.value_today|inr }}{% if v.inputs.roll_forward and v.inputs.roll_forward.applied %}; rolled forward one year at the {{ v.capital.cost_of_equity|pct(1) }} cost of equity, less the year-1 dividend, the 12-month target is {{ v.target_price|inr }}{% else %} (the 12-month target){% endif %} ({{ v.upside|pct }} upside; expected total return {{ v.total_return|pct }}), which maps to <b>{{ v.band_rating }}</b> under the rating bands.
   {% if v.reality_check and v.reality_check.message %}<br><span class="small"><b>{{ 'Reality check — flagged.' if v.reality_check.flag else 'Reality check.' }}</b> {{ v.reality_check.message[15:] if v.reality_check.message.startswith('Reality check: ') else v.reality_check.message }}</span>{% endif %}
-  {% if valuation_revisions %}<br><span class="small"><b>Valuation revisions:</b> {% for r in valuation_revisions %}{{ 'reality check' if r.by == 'reality_check' else 'CIO challenge' }}: target {{ r.before|inr(0) }} → {{ r.get('after')|inr(0) }}{{ '; ' if not loop.last }}{% endfor %}.</span>{% endif %}
+  {% if valuation_revisions %}<br><span class="small"><b>Valuation revisions:</b> {% for r in valuation_revisions %}{{ 'reality check' if r.by == 'reality_check' else ('Revised evidence' if r.by == 'evidence' else 'CIO challenge') }}: target {{ r.before|inr(0) }} → {{ r.get('after')|inr(0) }}{{ '; ' if not loop.last }}{% endfor %}.</span>{% endif %}
+  {% for r in valuation_revisions if r.by == 'evidence' %}
+  <p>{{ r.note }} · Fair value today {{ r.fair_before|inr }} → {{ r.fair_after|inr }}</p>
+  {% if r.changes %}<table><tr><th>Engine input</th><th>Previous</th><th>Revised</th></tr>
+  {% for k, pair in r.changes.items() %}<tr><td>{{ k }}</td><td>{{ pair[0] }}</td><td>{{ pair[1] }}</td></tr>{% endfor %}</table>{% endif %}
+  {% endfor %}
   {% if v.warnings %}<br><span class="small">Notes: {{ v.warnings|join(' · ') }}</span>{% endif %}</div>
 </section>
 

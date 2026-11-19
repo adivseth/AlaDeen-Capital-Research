@@ -200,7 +200,7 @@ def valuation_analyst(runner: Runner, cfg: dict, fp: FactPack, q: dict, memos: d
         cx.company_md(fp), cx.market_md(q), cx.financials_md(q), cx.peers_md(fp, q),
         f"## Default (history-based) assumptions\n{defaults}",
         cost_of_capital_md(q, cfg),
-        memos_md(memos, ("fundamentals", "business", "filings")),
+        memos_md(memos, tuple(cfg["desks"]) if cfg.get("review_baseline") else ("fundamentals", "business", "filings")),
         cx.warnings_md(fp),
     ]
     if challenge:

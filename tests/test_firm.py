@@ -174,7 +174,12 @@ def test_council_gaps_go_back_to_desks_and_decision_is_resigned(cfg, tmp_path):
     assert {"desk": "business", "notes": "Add the sector outlook.", "round": "council"} in state["revisions"]
     names = [c["agent"] for c in runner.calls]
     assert names.count("cio_decision") == 2  # re-signed after the follow-up
-    assert names.index("council_chair") < names.index("business_rev")
+    revised = names.index("business_rev", names.index("council_chair"))
+    revalued = names.index("valuation_rev", revised)
+    assert revalued < names.index("risk", revalued) < names.index("cio_decision", revalued)
+    evidence = next(r for r in state["valuation_revisions"] if r["by"] == "evidence")
+    assert evidence["after"] == state["valuation"]["target_price"]
+    assert evidence["fair_after"] == state["valuation"]["value_today"]
     assert "followup" in {e.get("phase") for e in ev.all() if e["type"] == "phase"}
     assert state["final"]["rating"] == state["valuation"]["band_rating"]  # compliance ran again
 
