@@ -6,10 +6,14 @@
   the archive or `aladeen retry [RUN_ID]`. Each AI answer is journaled (`journal.jsonl`) and the fact pack is frozen,
   so the retry reuses all finished work and runs only what is left. Works after a closed dashboard and after
   switching provider or key. New endpoint `POST /api/runs/{id}/retry`.
-- **Dashboard redesign ("The Research Desk").** New visual identity: a printed research bulletin crossed with a
-  trading-floor board. Paper and ink with one vermilion accent, Fraunces / IBM Plex type, rubber-stamp ratings,
-  ticker-tape masthead, desk-code floor board, pneumatic memo capsules, a telegraph-style activity wire and ledger
-  rows. Replaces the sidebar, gradients, emoji and cartoon avatars. Behaviour is unchanged.
+- **Dashboard redesign ("Night Desk").** The dashboard now follows the AlaDeen bull mark: a dark institutional
+  research terminal with the logo's cyan (ALADEEN), gold (CAPITAL) and teal (RESEARCH), and violet used sparingly.
+  Lexend headings, Source Sans 3 body and IBM Plex Mono tabular figures. The overview opens with the brand banner
+  and a coverage form, then Published / Buy / Hold / Sell / Stopped tiles and a recent-research ledger with column
+  headers. Navigation has line icons and plain labels (Overview, Live floor, Research archive, Call ledger,
+  Settings), a four-colour house rule sits under the masthead, ratings are colour-coded badges, and the floor
+  board, wire, verdict bar, tables and settings share the same surfaces. Works at phone width. Behaviour is
+  unchanged. (Replaces the earlier paper-and-ink "Research Desk" theme.)
 
 ## 0.1.0 — 2026-11-19
 
