@@ -3,36 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0E121B">
 <title>AlaDeen Capital Research</title>
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
 <header class="masthead">
   <div class="wrap">
-    <div class="dateline"><span id="dateline"></span><span>Mumbai · NSE &amp; BSE</span><span id="model-chip">Loading…</span></div>
+    <div class="dateline"><span id="dateline"></span><span>Mumbai · NSE &amp; BSE equity research</span><span id="model-chip">Loading…</span></div>
     <div class="titlebar">
-      <a class="brand" href="#/">
-        <img class="seal" src="/static/logo.png" alt="AlaDeen Capital Research seal">
-        <span class="wordmark"><b>AlaDeen</b><i>Capital Research</i></span>
+      <a class="brand" href="#/" aria-label="AlaDeen Capital Research — overview">
+        <img class="seal" src="/static/logo.png" alt="" width="52" height="52">
+        <span class="wordmark"><b>AlaDeen</b><i><span class="cap">Capital</span> <span class="res">Research</span></i></span>
       </a>
-      <nav class="mainnav">
-        <a href="#/" data-nav="home"><em>I</em>Desk</a>
-        <a href="#/office" data-nav="office"><em>II</em>Floor</a>
-        <a href="#/history" data-nav="history"><em>III</em>Archive</a>
-        <a href="#/calls" data-nav="calls"><em>IV</em>Ledger</a>
-        <a href="#/settings" data-nav="settings"><em>V</em>Settings</a>
+      <nav class="mainnav" aria-label="Main">
+        <a href="#/" data-nav="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</a>
+        <a href="#/office" data-nav="office"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Live floor</a>
+        <a href="#/history" data-nav="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg>Research archive</a>
+        <a href="#/calls" data-nav="calls"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m7 15 4-4 3 3 6-7"/></svg>Call ledger</a>
+        <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>Settings</a>
       </nav>
     </div>
   </div>
+  <div class="houserule" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div class="tape" aria-label="Published calls"><div class="tape-track" id="tape"></div></div>
 </header>
 <main id="view" class="view wrap"></main>
-<footer class="wrap foot"><span>Research only · not investment advice · not SEBI-registered</span><span>Prepared on this computer</span></footer>
-<div id="toast" class="toast"></div>
+<footer class="wrap foot"><span>© AlaDeen Capital Research · Research only · Not investment advice · Not SEBI-registered</span><span>Prepared on this computer</span></footer>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script src="/static/app.js"></script>
 </body>
 </html>

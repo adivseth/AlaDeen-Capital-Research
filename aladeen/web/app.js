@@ -104,40 +104,41 @@ async function renderHome() {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const issued = now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  const share = (x) => (done.length ? Math.round((count(x) / done.length) * 100) + "% of published" : "No calls yet");
   view.innerHTML = `
-  <div class="deskgrid">
-    <section class="slip">
-      <div class="slip-head"><span>Mandate slip № ${String(real.length + 1).padStart(4, "0")}</span><span>Issued ${esc(issued)}</span></div>
-      <div class="slip-body">
-        <h2>What shall the firm <em>look into</em> today?</h2>
-        <p>Name an NSE or BSE company. The CIO briefs the research desks, sends weak memos back, stages the bull-versus-bear debate, calls in the risk office and signs the report. Every step is visible on the floor.</p>
-        <form id="newform">
-          <div class="slipfields">
-            <div><label class="f" for="ticker">Company · ticker or BSE code</label><input class="big" id="ticker" placeholder="TCS, RELIANCE, 532540" autocomplete="off" autofocus></div>
-            <div><label class="f" for="asof">As of</label><input id="asof" type="date" value="${today}" max="${today}"></div>
-          </div>
-          <div class="slipactions"><button class="btn primary" type="submit">Issue the mandate →</button><button class="btn" type="button" id="demo">Run the demo</button></div>
-        </form>
-      </div>
-    </section>
-    <aside class="book">
-      <div class="book-head"><span>The book</span><span>${real.length} on file</span></div>
-      <div class="leader"><span>Published</span><i></i><b>${done.length}</b></div>
-      <div class="leader BUY"><span>Buy</span><i></i><b>${count("BUY")}</b></div>
-      <div class="leader HOLD"><span>Hold</span><i></i><b>${count("HOLD")}</b></div>
-      <div class="leader SELL"><span>Sell</span><i></i><b>${count("SELL")}</b></div>
-      <div class="leader"><span>Stopped</span><i></i><b>${real.filter((r) => r.status === "error").length}</b></div>
-    </aside>
-  </div>
+  <section class="hero">
+    <div class="hero-copy">
+      <div class="kicker">Initiate coverage</div>
+      <h1>Independent equity research on <span>India's listed companies</span>.</h1>
+      <p>Name an NSE or BSE company. The CIO briefs the research desks, sends weak memos back, stages the bull-versus-bear debate, calls in the risk office and signs the report. Every step is visible on the live floor.</p>
+      <form id="newform" class="mandate">
+        <div class="mfields">
+          <div class="field"><label class="f" for="ticker">Company · NSE ticker or BSE code</label><input class="big" id="ticker" placeholder="TCS, RELIANCE, 532540" autocomplete="off" autofocus></div>
+          <div class="field"><label class="f" for="asof">As of</label><input id="asof" type="date" value="${today}" max="${today}"></div>
+        </div>
+        <div class="mactions"><button class="btn primary lg" type="submit">Start research</button><button class="btn lg" type="button" id="demo">Run the demo</button></div>
+        <div class="mfoot"><span class="slipno">Mandate № ${String(real.length + 1).padStart(4, "0")} · ${esc(issued)}</span><span>Rating bands: Buy &gt; 15% · Hold 0–15% · Sell &lt; 0%</span></div>
+      </form>
+    </div>
+    <figure class="hero-art"><img src="/static/banner.jpg" alt="AlaDeen Capital Research — the charging bull over a market chart" width="1600" height="905"></figure>
+  </section>
+  <section class="kpis" aria-label="Coverage summary">
+    <div class="kpi all"><span>Published</span><b>${done.length}</b><small>${real.length} on file</small></div>
+    <div class="kpi BUY"><span>Buy</span><b>${count("BUY")}</b><small>${share("BUY")}</small></div>
+    <div class="kpi HOLD"><span>Hold</span><b>${count("HOLD")}</b><small>${share("HOLD")}</small></div>
+    <div class="kpi SELL"><span>Sell</span><b>${count("SELL")}</b><small>${share("SELL")}</small></div>
+    <div class="kpi"><span>Stopped</span><b>${real.filter((r) => r.status === "error").length}</b><small>Can be continued</small></div>
+  </section>
   <div class="sect-head"><div><div class="kicker">Latest filings</div><h2>Recent research</h2></div><a href="#/history" class="btn ghost sm">Open the archive →</a></div>
-  ${runs.length ? runs.slice(0, 8).map(lrow).join("") :
-    `<div class="empty"><div class="e">Nothing filed</div>No research yet. Issue a mandate above, or run the demo to watch the floor at work.</div>`}`;
+  ${runs.length ? `<div class="ledger">${LHEAD}${runs.slice(0, 8).map(lrow).join("")}</div>` :
+    `<div class="ledger"><div class="empty"><div class="e">Nothing filed</div>No research yet. Start one above, or run the demo to watch the floor at work.</div></div>`}`;
   $("#newform").onsubmit = (e) => { e.preventDefault(); startResearch($("#ticker").value, $("#asof").value); };
   $("#demo").onclick = () => startResearch("DEMO", null, true);
   bindRows();
 }
 
 // One filing in the ledger. A stopped research carries its reason and a Try again button.
+const LHEAD = `<div class="lhead" aria-hidden="true"><span>Ticker</span><span>Company</span><span>Rating</span><span class="r">Target</span><span class="r up">Upside</span><span class="go"></span></div>`;
 function lrow(r) {
   const ok = r.status === "done";
   return `<div class="lrow" data-id="${esc(r.id)}" tabindex="0" role="link">
@@ -168,8 +169,8 @@ async function startResearch(ticker, asOf, demo = false) {
 }
 
 function renderEmptyOffice() {
-  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ II · The floor</div><h1>The floor is quiet.</h1><p>Issue a mandate and the desks will light up as the research goes.</p></div></div>
-  ${officeHTML()}<div class="empty"><div class="e">No research running</div><a href="#/">Go to the desk</a> and start one, or run the demo.</div>`;
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">Live floor</div><h1>The floor is quiet.</h1><p>Start a research and the desks light up as the work moves through the firm.</p></div></div>
+  ${officeHTML()}<div class="empty"><div class="e">No research running</div><a href="#/">Go to the overview</a> and start one, or run the demo.</div>`;
 }
 
 /* ------------------------------------------------------------------ the floor board */
@@ -416,9 +417,9 @@ function apply(e, animate) {
 /* ------------------------------------------------------------------ archive */
 async function renderHistory() {
   const runs = await api("/api/runs");
-  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ III · The archive</div><h1>Every research on file.</h1><p>Everything your firm has run on this computer. Open one to read the report or watch the floor again.</p></div>
-    <div style="display:flex;gap:10px"><input id="q" placeholder="Search company or ticker" style="width:240px">
-    <select id="rf" style="width:140px"><option value="">All ratings</option><option>BUY</option><option>HOLD</option><option>SELL</option></select></div></div>
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">Research archive</div><h1>Every research on file.</h1><p>Everything your firm has run on this computer. Open one to read the report or replay the floor.</p></div>
+    <div class="toolbar"><input id="q" placeholder="Search company or ticker" aria-label="Search company or ticker">
+    <select id="rf" aria-label="Filter by rating"><option value="">All ratings</option><option>BUY</option><option>HOLD</option><option>SELL</option></select></div></div>
     <div class="sheet"><table class="t"><thead><tr><th>Company</th><th>As of</th><th>Status</th><th>Rating</th><th class="num">Target</th><th class="num">CMP</th><th class="num">Upside</th><th>Council</th><th>Run on</th><th></th></tr></thead><tbody id="rows"></tbody></table>
     <div id="none" class="empty" hidden><div class="e">Nothing here</div>No research matches.</div></div>`;
   const draw = () => {
@@ -426,7 +427,7 @@ async function renderHistory() {
     const list = runs.filter((r) => (!q || ((r.company || "") + r.ticker).toLowerCase().includes(q)) && (!rf || r.rating === rf));
     $("#none").hidden = list.length > 0;
     $("#rows").innerHTML = list.map((r) => `<tr data-id="${esc(r.id)}" style="cursor:pointer">
-      <td><b style="font:600 17px var(--serif)">${esc(r.company || r.ticker)}</b><div class="muted small" style="font-family:var(--mono)">${esc(r.ticker)}</div></td><td style="font-family:var(--mono)">${esc(r.as_of)}</td>
+      <td><b class="cname">${esc(r.company || r.ticker)}</b><span class="ctick">${esc(r.ticker)}</span></td><td class="mono">${esc(r.as_of)}</td>
       <td>${statusPill(r.status, r.demo)}</td><td>${ratingPill(r.rating, r.qualifier)}</td>
       <td class="num">${inr(r.target_price, 0)}</td><td class="num">${inr(r.cmp, 0)}</td><td class="num">${r.status === "done" ? pct(r.upside) : "—"}</td>
       <td>${esc(r.council_verdict || "—")}</td><td class="small muted">${when(r.created_at)}</td>
@@ -449,7 +450,7 @@ async function renderHistory() {
 async function renderCalls() {
   const data = await api("/api/calls");
   const s = data.summary || {};
-  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ IV · The ledger</div><h1>Every call, scored.</h1><p>Each published rating is checked against the Nifty 50 once twelve months have passed.</p></div>
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">Call ledger</div><h1>Every call, scored.</h1><p>Each published rating is checked against the Nifty 50 once twelve months have passed.</p></div>
     <button class="btn primary" id="score">Score my calls</button></div>
     <div class="strip">
       <div><span class="l">Calls</span><b>${s.calls ?? 0}</b></div>
@@ -458,9 +459,9 @@ async function renderCalls() {
       <div><span class="l">Avg alpha</span><b>${s.avg_alpha_all == null ? "—" : pct(s.avg_alpha_all)}</b></div>
     </div>
     <div class="sheet">${data.rows.length ? `<table class="t"><thead><tr><th>ID</th><th>Date</th><th>Company</th><th>Rating</th><th class="num">Target</th><th class="num">Price then</th><th>Reviewed</th><th class="num">Return</th><th class="num">Alpha</th><th>Verdict</th></tr></thead><tbody>
-      ${data.rows.map((r) => `<tr><td style="font-family:var(--mono)">${esc(r.call_id)}</td><td style="font-family:var(--mono)">${esc(r.call_date)}</td><td><b style="font:600 17px var(--serif)">${esc(r.company)}</b><div class="muted small" style="font-family:var(--mono)">${esc(r.ticker)}</div></td>
+      ${data.rows.map((r) => `<tr><td class="mono">${esc(r.call_id)}</td><td class="mono">${esc(r.call_date)}</td><td><b class="cname">${esc(r.company)}</b><span class="ctick">${esc(r.ticker)}</span></td>
       <td>${ratingPill((r.rating || "").split(" ")[0])}</td><td class="num">${esc(r.target_price)}</td><td class="num">${esc(r.close_on_call_date)}</td>
-      <td style="font-family:var(--mono)">${esc(r.review_date || "—")}</td><td class="num">${r.stock_return ? pct(+r.stock_return) : "—"}</td><td class="num">${r.alpha ? pct(+r.alpha) : "—"}</td><td>${esc(r.verdict || "Not scored")}</td></tr>`).join("")}
+      <td class="mono">${esc(r.review_date || "—")}</td><td class="num">${r.stock_return ? pct(+r.stock_return) : "—"}</td><td class="num">${r.alpha ? pct(+r.alpha) : "—"}</td><td>${esc(r.verdict || "Not scored")}</td></tr>`).join("")}
     </tbody></table>` : `<div class="empty"><div class="e">No calls yet</div>Each published research adds one line to the ledger.</div>`}</div>`;
   $("#score").onclick = async () => {
     const b = $("#score"); b.disabled = true; b.textContent = "Scoring…";
@@ -484,8 +485,8 @@ async function renderSettings() {
   const keyRows = s.providers.filter((p) => p.key).map(keyRow).join("");
   const dataKeyRows = (s.data_sources || []).map(keyRow).join("");
   const desks = s.desks.map((d) => { const a = agentMeta(d); return `<label><input type="checkbox" data-desk="${d}" ${v.desks.includes(d) ? "checked" : ""}> <i>${code(d)}</i> ${esc(a.title)}</label>`; }).join("");
-  const sec = (n, title) => `<h3><span class="sn">§ ${n}</span>${title}</h3>`;
-  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ V · Settings</div><h1>How the firm is run.</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
+  const sec = (n, title) => `<h3><span class="sn">Section ${String(n).padStart(2, "0")}</span>${title}</h3>`;
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">Settings</div><h1>How the firm is run.</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
   <div class="settings"><div class="toc"><a href="#s-models" data-jump><em>1</em>AI models</a><a href="#s-keys" data-jump><em>2</em>API keys</a><a href="#s-brief" data-jump><em>3</em>Research brief</a><a href="#s-team" data-jump><em>4</em>Research team</a><a href="#s-data" data-jump><em>5</em>Data</a><a href="#s-val" data-jump><em>6</em>Valuation</a><a href="#s-brand" data-jump><em>7</em>Report &amp; dashboard</a><a href="#s-store" data-jump><em>8</em>Storage</a></div>
   <form id="sform">
   <section class="card" id="s-models">${sec(1, "AI models")}
