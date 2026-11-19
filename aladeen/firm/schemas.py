@@ -67,10 +67,17 @@ class ValuationAssumptions(BaseModel):
     terminal_growth: float | None = Field(None, description="Stable growth, decimal; capped at nominal GDP")
     stable_roc: float | None = Field(None, description="Return on capital in stable growth, decimal")
     beta: float | None = Field(None, description="Override only with a stated reason")
-    sustainable_roe: float | None = Field(None, description="Banks/NBFCs/insurers: sustainable ROE, decimal")
-    long_term_growth: float | None = Field(None, description="Banks/NBFCs/insurers: long-run growth, decimal")
-    bear: Shift = Field(default_factory=lambda: Shift(growth_pp=-0.03, margin_pp=-0.02, wacc_pp=0.01,
-                                                      roe_pp=-0.03))
+    cost_of_equity_premium: float | None = Field(
+        None, description="Company-specific premium added to the cost of equity, decimal; only with a stated reason")
+    sustainable_roe: float | None = Field(
+        None, description="Banks/NBFCs/insurers: normalised (terminal) ROE the business can sustain, decimal")
+    roe_path: list[float] | None = Field(
+        None, description="Banks/NBFCs/insurers: ROE for each of the next 10 years, decimals (shorter lists "
+                          "are extended at the sustainable ROE)")
+    payout_ratio: float | None = Field(None, description="Banks/NBFCs/insurers: dividend payout ratio, decimal")
+    long_term_growth: float | None = Field(None, description="Banks/NBFCs/insurers: terminal growth, decimal")
+    bear: Shift = Field(default_factory=lambda: Shift(growth_pp=-0.02, margin_pp=-0.015, wacc_pp=0.005,
+                                                      roe_pp=-0.02))
     bull: Shift = Field(default_factory=lambda: Shift(growth_pp=0.02, margin_pp=0.015, wacc_pp=-0.005,
                                                       roe_pp=0.02))
     bear_case_narrative: str = ""
@@ -82,6 +89,8 @@ class ValuationAssumptions(BaseModel):
         d = self.model_dump(exclude={"bear", "bull", "rationale", "bear_case_narrative",
                                      "base_case_narrative", "bull_case_narrative"})
         d["scenarios"] = {"bear": self.bear.model_dump(), "bull": self.bull.model_dump()}
+        if d.get("sustainable_roe") is not None:
+            d["terminal_roe"] = d["sustainable_roe"]
         for k in ("revenue_growth", "ebit_margin"):
             v = d.get(k)
             if v is not None and len(v) != 5:
@@ -140,6 +149,10 @@ class FinalCall(BaseModel):
     kill_fact: str
     why_losing_side_lost: str
     rating_rationale: str
+    valuation_challenge: str | None = Field(
+        None, description="Only if you believe the engine's valuation is wrong: the specific input you dispute "
+                          "(e.g. the ROE path, cost of equity, growth) and the evidence. The valuation is re-run once "
+                          "with your challenge; the rating then follows the bands.")
 
 
 # ------------------------------------------------------------------ independent council

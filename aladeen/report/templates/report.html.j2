@@ -84,6 +84,7 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 </head>
 <body>
 <div class="page">
+{% if report_status == 'draft' %}<div class="demo-banner">DRAFT — not a final call. {{ draft_reason }} This call has not been filed in the call log.</div>{% endif %}
 {% if synthetic %}<div class="demo-banner">DEMO REPORT — synthetic company and offline agents. No real security is described and no AI model was called.</div>{% endif %}
 
 <div class="topbar">
@@ -155,11 +156,11 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 <!-- 02 -->
 <section class="card c2">
   <h2><span class="num">SECTION 02</span> Scenario analysis, debate and final call</h2>
-  <p>The target price is the probability-weighted blend of bear, base and bull values. Each scenario value blends the intrinsic value ({{ 'DCF' if v.method == 'fcff_dcf' else 'justified P/B' }}, weight {{ (v.inputs.dcf_weight_used*100)|round|int }}%) with the peer-multiple value (weight {{ ((1 - v.inputs.dcf_weight_used)*100)|round|int }}%).</p>
-  <table><tr><th class="l">Scenario</th><th>Intrinsic</th><th>Peer multiple</th><th>Blended value</th><th>Probability</th><th class="l">Key assumptions</th></tr>
+  <p>Each scenario's value today blends the intrinsic value ({{ 'DCF' if v.method == 'fcff_dcf' else 'residual income on book value' }}, weight {{ (v.inputs.dcf_weight_used*100)|round|int }}%) with the relative value ({{ 'peer P/E' if v.method == 'fcff_dcf' else "the company's own 5-year median P/B" }}, weight {{ ((1 - v.inputs.dcf_weight_used)*100)|round|int }}%).{% if v.inputs.roll_forward and v.inputs.roll_forward.applied %} The 12-month value rolls today's value forward at the cost of equity ({{ v.capital.cost_of_equity|pct(1) }}) less the year-1 dividend: a stock bought at fair value is expected to earn its cost of equity.{% endif %} The target is the probability-weighted 12-month value.</p>
+  <table><tr><th class="l">Scenario</th><th>Intrinsic</th><th>Relative</th><th>Value today</th><th>12-month value</th><th>Probability</th><th class="l">Key assumptions</th></tr>
   {% for key, label in [('bear','Bear case'),('base','Base case ★'),('bull','Bull case')] %}{% set s = v.scenarios[key] %}
-  <tr class="{{ 'star' if key == 'base' else '' }}"><td>{{ label }}</td><td>{{ s.intrinsic|inr(0) }}</td><td>{{ s.multiples|inr(0) }}</td><td><b>{{ s.value|inr(0) }}</b></td><td>{{ s.probability|pct(0) }}</td><td class="l small">{{ assumptions.get(key ~ '_case_narrative') or '—' }}</td></tr>{% endfor %}
-  <tr class="b"><td>Probability-weighted target</td><td></td><td></td><td>{{ v.target_price|inr(0) }}</td><td>100%</td><td class="l">Expected total return {{ v.total_return|pct }} (upside {{ v.upside|pct }} + dividend yield {{ v.dividend_yield|pct(2) }})</td></tr></table>
+  <tr class="{{ 'star' if key == 'base' else '' }}"><td>{{ label }}</td><td>{{ s.intrinsic|inr(0) }}</td><td>{{ s.multiples|inr(0) }}</td><td>{{ s.get('value_today', s.value)|inr(0) }}</td><td><b>{{ s.value|inr(0) }}</b></td><td>{{ s.probability|pct(0) }}</td><td class="l small">{{ assumptions.get(key ~ '_case_narrative') or '—' }}</td></tr>{% endfor %}
+  <tr class="b"><td>Probability-weighted</td><td></td><td></td><td>{{ v.get('value_today')|inr(0) }}</td><td>{{ v.target_price|inr(0) }}</td><td>100%</td><td class="l">Expected total return {{ v.total_return|pct }} (upside {{ v.upside|pct }} + dividend yield {{ v.dividend_yield|pct(2) }})</td></tr></table>
   {% if charts.scenario %}<img class="chart" style="max-width:640px" src="{{ charts.scenario }}" alt="Scenario chart">{% endif %}
 
   <h3>Bull vs bear debate</h3>
@@ -179,7 +180,8 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
   <div class="box info" style="margin-top:12px"><h4>CIO decision</h4>
     <b>{{ rating }}{% if final.qualifier %} ({{ final.qualifier }}){% endif %}</b> · {{ final.position_size }} position. {{ final.rating_rationale }}<br>
     <b>Why the losing side lost:</b> {{ final.why_losing_side_lost }}
-    {% if rating_check and not rating_check.consistent %}<br><span class="pill bad">Rating aligned to bands</span> {{ rating_check.note }}{% endif %}</div>
+    {% if rating_check and not rating_check.consistent %}<br><span class="pill bad">Rating aligned to bands</span> {{ rating_check.note }}{% endif %}
+    {% if final.valuation_challenge %}<br><b>CIO's challenge to the valuation:</b> {{ final.valuation_challenge }}{% endif %}</div>
 </section>
 
 <!-- 03 -->
@@ -222,15 +224,22 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 <!-- 09 -->
 <section class="card c6">
   <h2><span class="num">SECTION 09</span> Valuation</h2>
-  <h3>{{ 'DCF model — free cash flow to the firm' if v.method == 'fcff_dcf' else 'Justified price-to-book (financial company)' }}</h3>
+  <h3>{{ 'DCF model — free cash flow to the firm' if v.method == 'fcff_dcf' else 'Residual-income (excess-return) model on book value — financial company' }}</h3>
   <table><tr><th class="l">Assumption</th><th>Value</th><th class="l">Basis</th></tr>
-    <tr><td>Risk-free rate (10Y G-Sec)</td><td>{{ v.capital.risk_free|pct(2) }}</td><td class="l">Configured default (see docs/configuration.md)</td></tr>
-    <tr><td>Equity risk premium (India)</td><td>{{ v.capital.erp|pct(2) }}</td><td class="l">Damodaran-style India ERP; configurable</td></tr>
-    <tr><td>Beta</td><td>{{ v.capital.beta|num(2) }}</td><td class="l">2-year weekly vs {{ fp.benchmark }} (bounded 0.5–2.0) unless overridden</td></tr>
-    <tr><td>Cost of equity</td><td>{{ v.capital.cost_of_equity|pct(2) }}</td><td class="l">Ke = Rf + β × ERP</td></tr>
-    <tr><td>Cost of debt (pre-tax)</td><td>{{ v.capital.cost_of_debt_pre_tax|pct(2) }}</td><td class="l">Interest ÷ average borrowings, bounded</td></tr>
+    <tr><td>10Y G-Sec yield</td><td>{{ v.capital.risk_free|pct(2) }}</td><td class="l">Configured default (see docs/configuration.md)</td></tr>
+    {% if v.capital.default_spread %}<tr><td>Less: sovereign default spread</td><td>{{ v.capital.default_spread|pct(2) }}</td><td class="l">The total ERP below already prices country risk, so it is not counted twice</td></tr>
+    <tr><td>Riskless rate (INR)</td><td>{{ v.capital.riskless_rate|pct(2) }}</td><td class="l">G-Sec − default spread</td></tr>{% endif %}
+    <tr><td>Equity risk premium (India, total)</td><td>{{ v.capital.erp|pct(2) }}</td><td class="l">Damodaran India ERP; configurable</td></tr>
+    <tr><td>Beta</td><td>{{ v.capital.beta|num(2) }}</td><td class="l">2-year weekly vs {{ fp.benchmark }} (regression {{ mk.beta_raw|num(2) }}{% if cfg.blume_adjust_beta %}, Blume-adjusted{% endif %}, bounded 0.5–2.0) unless overridden</td></tr>
+    {% if v.capital.premium %}<tr><td>Company-specific premium</td><td>{{ v.capital.premium|pct(2) }}</td><td class="l">Set by the valuation analyst (see rationale)</td></tr>{% endif %}
+    <tr class="b"><td>Cost of equity</td><td>{{ v.capital.cost_of_equity|pct(2) }}</td><td class="l">Ke = riskless rate + β × ERP{% if v.capital.premium %} + premium{% endif %}</td></tr>
+    {% if v.method == 'fcff_dcf' %}<tr><td>Cost of debt (pre-tax)</td><td>{{ v.capital.cost_of_debt_pre_tax|pct(2) }}</td><td class="l">Interest ÷ average borrowings, bounded</td></tr>
     <tr><td>Debt / total capital</td><td>{{ v.capital.debt_to_capital|pct(1) }}</td><td class="l">Market values</td></tr>
-    <tr class="b"><td>WACC</td><td>{{ v.capital.wacc|pct(2) }}</td><td class="l">Ke × E/V + Kd × (1 − t) × D/V</td></tr>
+    <tr class="b"><td>WACC</td><td>{{ v.capital.wacc|pct(2) }}</td><td class="l">Ke × E/V + Kd × (1 − t) × D/V</td></tr>{% endif %}
+    {% if v.residual_income %}{% set ri = v.residual_income %}<tr><td>Book value (net worth)</td><td>₹{{ ri.bv0|num }} Cr</td><td class="l">Balance sheet at {{ ri.bv_date }}; {{ ri.bvps0|inr }} per share</td></tr>
+    <tr><td>Sustainable (terminal) ROE</td><td>{{ ri.terminal_roe|pct(1) }}</td><td class="l">Valuation analyst; default = 5-year median ROE</td></tr>
+    <tr><td>Terminal growth</td><td>{{ ri.terminal_growth|pct(1) }}</td><td class="l">Capped at {{ cfg.terminal_growth_cap|pct(1) }} (nominal GDP proxy)</td></tr>
+    <tr><td>Dividend payout</td><td>{{ ri.payout|pct(1) }}</td><td class="l">Retained profit grows book value</td></tr>{% endif %}
     {% if v.dcf %}<tr><td>Terminal growth</td><td>{{ v.inputs.dcf.terminal_growth|pct(1) }}</td><td class="l">Capped at {{ cfg.terminal_growth_cap|pct(1) }} (nominal GDP proxy)</td></tr>
     <tr><td>Stable-phase return on capital</td><td>{{ v.inputs.dcf.stable_roc|pct(1) }}</td><td class="l">Terminal reinvestment = g ÷ ROC = {{ v.dcf.terminal_reinvestment_rate|pct(1) }}</td></tr>{% endif %}
   </table>
@@ -261,16 +270,37 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
   <p class="small">Sensitivity of DCF value per share to WACC and terminal growth. ★ row = base terminal growth; middle column = base WACC.</p>{% endif %}
   </div></div>
   {% endif %}
-  {% if v.justified_pb %}<table><tr><th class="l">Justified P/B</th><th>Value</th></tr>
-    <tr><td>Sustainable ROE</td><td>{{ v.justified_pb.roe|pct }}</td></tr><tr><td>Long-term growth</td><td>{{ v.justified_pb.growth|pct }}</td></tr>
-    <tr><td>Cost of equity</td><td>{{ v.justified_pb.cost_of_equity|pct }}</td></tr><tr><td>Justified P/B = (ROE − g) ÷ (Ke − g)</td><td>{{ v.justified_pb.justified_pb|x(2) }}</td></tr>
-    <tr><td>Book value per share</td><td>{{ v.justified_pb.bvps|inr }}</td></tr><tr class="star"><td>Value per share</td><td>{{ v.justified_pb.per_share|inr }}</td></tr></table>{% endif %}
+  {% if v.residual_income %}{% set ri = v.residual_income %}
+  <h3>Base case: residual income by year (₹ Cr)</h3>
+  <div class="tablewrap"><table><tr><th class="l">Year</th>{% for p in ri.projections %}<th>Y{{ p.year }}</th>{% endfor %}</tr>
+    <tr><td>Opening book value</td>{% for p in ri.projections %}<td>{{ p.bv_open|num }}</td>{% endfor %}</tr>
+    <tr><td>ROE</td>{% for p in ri.projections %}<td>{{ p.roe|pct(1) }}</td>{% endfor %}</tr>
+    <tr><td>Net profit</td>{% for p in ri.projections %}<td>{{ p.net_income|num }}</td>{% endfor %}</tr>
+    <tr class="b"><td>Residual income (ROE − Ke) × book</td>{% for p in ri.projections %}<td>{{ p.residual_income|num }}</td>{% endfor %}</tr>
+    <tr><td>PV of residual income</td>{% for p in ri.projections %}<td>{{ p.pv_ri|num }}</td>{% endfor %}</tr></table></div>
+  <div class="grid2"><div>
+  <table><tr><th class="l">Residual-income output</th><th>₹ Cr</th></tr>
+    <tr><td>Book value today</td><td>{{ ri.bv0|num }}</td></tr>
+    <tr><td>PV of explicit residual income</td><td>{{ ri.pv_explicit_ri|num }}</td></tr>
+    <tr><td>PV of terminal residual income ({{ ri.tv_share_of_value|pct(0) }} of value)</td><td>{{ ri.pv_terminal|num }}</td></tr>
+    <tr class="b"><td>Equity value</td><td>{{ ri.equity_value|num }}</td></tr>
+    <tr><td>Implied P/B on today's book</td><td>{{ ri.implied_pb|x(2) }}</td></tr>
+    <tr class="star"><td>Residual-income value per share</td><td>{{ ri.per_share|inr }}</td></tr>
+    {% if v.justified_pb %}<tr><td>Cross-check: one-stage justified P/B (ROE<sub>T</sub> − g) ÷ (Ke − g)</td><td>{{ v.justified_pb.justified_pb|x(2) }}</td></tr>{% endif %}
+    {% if v.implied_roe_at_cmp is not none %}<tr><td>Steady ROE implied by the current price</td><td>{{ v.implied_roe_at_cmp|pct(1) }}</td></tr>{% endif %}</table>
+  </div><div>
+  {% if sens and sens.get('cost_of_equity') %}<table><tr><th class="l">ROE<sub>T</sub> ↓ / Ke →</th>{% for k in sens.cost_of_equity %}<th>{{ k|pct(1) }}</th>{% endfor %}</tr>
+    {% for r in sens.terminal_roe %}{% set ri_ = loop.index0 %}<tr class="{{ 'star' if ri_ == 2 else '' }}"><td>{{ r|pct(1) }}</td>{% for val in sens['values'][ri_] %}<td>{{ val|inr(0) if val else 'n/m' }}</td>{% endfor %}</tr>{% endfor %}</table>
+  <p class="small">Residual-income value per share for the sustainable ROE (whole path shifted) and cost of equity. ★ row = base ROE; middle column = base Ke.</p>{% endif %}
+  </div></div>
+  {% endif %}
   <div class="box"><h4>Valuation analyst's rationale</h4>{{ assumptions.get('rationale', '')|md|safe }}</div>
 
   <h3>Relative valuation — peer comparison (Screener.in)</h3>
   {% if peers %}<div class="tablewrap"><table><tr><th class="l">Company</th>{% for c in peer_cols %}<th>{{ c }}</th>{% endfor %}</tr>
   {% for p in peers %}<tr class="{{ 'star' if p.Company.lower().startswith(fp.ticker.lower()) or fp.name.lower().startswith(p.Company.lower()) else ('b' if p.Company.startswith('Median') else '') }}"><td>{{ p.Company }}</td>{% for c in peer_cols %}<td>{{ p.get(c)|num(1) }}</td>{% endfor %}</tr>{% endfor %}</table></div>
-  <p>Peer median P/E (excluding the company, {{ v.multiples.peer_count }} peers): <b>{{ v.multiples.peer_pe_median|x }}</b> × TTM EPS {{ v.multiples.eps_ttm|inr }} = <b>{{ v.multiples.implied_price|inr(0) }}</b>.</p>
+  {% if v.method == 'fcff_dcf' %}<p>Median P/E of size-comparable peers (excluding the company, {{ v.multiples.peer_count }} peers{% if v.multiples.peers_dropped_for_size %}; {{ v.multiples.peers_dropped_for_size|join(', ') }} excluded for size{% endif %}): <b>{{ v.multiples.peer_pe_median|x }}</b> × TTM EPS {{ v.multiples.eps_ttm|inr }} = <b>{{ v.multiples.implied_price|inr(0) }}</b>.</p>
+  {% else %}<p>Relative leg for a lender: the company's own median P/B at the last five fiscal year-ends{% if v.multiples.pb_history %} ({% for x in v.multiples.pb_history %}{{ x.fy }} {{ x.pb|x(2) }}{{ ', ' if not loop.last }}{% endfor %}){% endif %} = <b>{{ v.multiples.pb_anchor|x(2) }}</b> × book value per share {{ v.multiples.bvps|inr }} = <b>{{ v.multiples.implied_price|inr(0) }}</b>. Peer P/E is shown for context only (median of size-comparable peers {{ v.multiples.peer_pe_median|x }}).</p>{% endif %}
   {% else %}<p>Peer data not available.</p>{% endif %}
 
   <h3>Graham cross-checks</h3>
@@ -281,7 +311,10 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
     <tr><td>Margin of safety at CMP vs base value</td><td>{{ v.margin_of_safety|pct }}</td></tr></table></div>
   <div><table><tr><th class="l">Defensive-investor test</th><th>Value</th><th>Result</th></tr>
     {% for c in v.graham.checklist %}<tr><td class="l">{{ c.criterion }}</td><td>{{ c.value }}</td><td>{% if c['pass'] is none %}<span class="pill na">n/a</span>{% elif c['pass'] %}<span class="pill ok">Pass</span>{% else %}<span class="pill bad">Fail</span>{% endif %}</td></tr>{% endfor %}</table></div></div>
-  <div class="box info"><h4>Valuation conclusion</h4>At CMP {{ mk.cmp|inr }}, the probability-weighted value is {{ v.target_price|inr }} ({{ v.upside|pct }} upside; expected total return {{ v.total_return|pct }}), which maps to <b>{{ v.band_rating }}</b> under the rating bands.{% if v.warnings %}<br><span class="small">Notes: {{ v.warnings|join(' · ') }}</span>{% endif %}</div>
+  <div class="box info"><h4>Valuation conclusion</h4>At CMP {{ mk.cmp|inr }}, the probability-weighted value today is {{ v.value_today|inr }}{% if v.inputs.roll_forward and v.inputs.roll_forward.applied %}; rolled forward one year at the {{ v.capital.cost_of_equity|pct(1) }} cost of equity, less the year-1 dividend, the 12-month target is {{ v.target_price|inr }}{% else %} (the 12-month target){% endif %} ({{ v.upside|pct }} upside; expected total return {{ v.total_return|pct }}), which maps to <b>{{ v.band_rating }}</b> under the rating bands.
+  {% if v.reality_check and v.reality_check.message %}<br><span class="small"><b>{{ 'Reality check — flagged.' if v.reality_check.flag else 'Reality check.' }}</b> {{ v.reality_check.message[15:] if v.reality_check.message.startswith('Reality check: ') else v.reality_check.message }}</span>{% endif %}
+  {% if valuation_revisions %}<br><span class="small"><b>Valuation revisions:</b> {% for r in valuation_revisions %}{{ 'reality check' if r.by == 'reality_check' else 'CIO challenge' }}: target {{ r.before|inr(0) }} → {{ r.get('after')|inr(0) }}{{ '; ' if not loop.last }}{% endfor %}.</span>{% endif %}
+  {% if v.warnings %}<br><span class="small">Notes: {{ v.warnings|join(' · ') }}</span>{% endif %}</div>
 </section>
 
 <!-- 10 -->

@@ -64,13 +64,26 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "max_concall_transcripts": 4,
     "document_mode": "focused",  # focused | full
     "document_char_budget": 60000,
+    "filings_chars_per_document": 30000,  # focused mode: per document; the latest call/deck is read in full
+    "max_presentations": 2,  # investor presentations of the latest quarters
+    "max_announcements_read": 5,  # newest exchange announcements read in full
+    "announcement_chars": 3000,
+    "web_results": 6,  # Exa results per web-research topic
+    "web_text_chars": 4000,
     "fetch_documents": True,
     "http_timeout": 30,
     # ---------------------------------------------------------------- Valuation
     # India 10Y G-Sec yield. RBI reported 7.22% on 11-Nov-2026 (6.94% GS 2036).
     "risk_free_rate": 0.0722,
-    # India total equity risk premium; published early-2026 estimates ranged ~6%-9%.
-    "equity_risk_premium": 0.07,
+    # India total equity risk premium (includes the country risk premium): Damodaran, January 2026.
+    "equity_risk_premium": 0.0708,
+    # India sovereign default spread (Damodaran, January 2026). Netted off the G-Sec yield to get the
+    # INR riskless rate, because the total ERP above already prices country risk. Set 0 to disable.
+    "country_default_spread": 0.0187,
+    "blume_adjust_beta": True,  # adjusted beta = 0.67 x regression beta + 0.33
+    "roll_forward_target": True,  # 12-month target = value today x (1 + Ke) - year-1 dividend
+    # The CIO must explain or revise a target this far from both the price and the broker consensus.
+    "reality_check_threshold": 0.25,
     "tax_rate": 0.2517,
     "terminal_growth_cap": 0.065,
     "dcf_weight": 0.6,
@@ -98,6 +111,12 @@ Evaluate the business on its future prospects, not just its fundamentals and tec
 Before finalising, assess whether complete and accurate research has been done. If not, do it.""",
     # After the independent council, send its gaps back to the desks once and re-sign the decision.
     "council_followup": True,
+    "council_recheck": True,  # after a follow-up that changed memos, the council reviews once more
+    "block_incomplete_reports": True,  # still incomplete after that: publish as a draft, do not log the call
+    "reality_check_revision": True,  # a target far from price and consensus goes back to the analyst once
+    "cio_valuation_challenge": True,  # the CIO may dispute the valuation once before signing
+    # Call IDs continue from this number when the local log is behind a shared sheet (e.g. 24 -> AC-025).
+    "call_id_floor": 0,
     # ---------------------------------------------------------------- Report
     "firm_name": "AlaDeen Capital Research",
     "analyst_name": "AlaDeen Capital Research AI team",
@@ -108,10 +127,13 @@ EDITABLE = [
     "llm_provider", "deep_provider", "quick_provider", "deep_think_llm", "quick_think_llm", "backend_url",
     "temperature", "max_tokens", "desks", "cio_revision_rounds", "max_debate_rounds", "run_council",
     "log_calls", "output_language", "fetch_documents", "document_mode", "max_annual_reports",
-    "max_concall_transcripts", "news_lookback_days", "risk_free_rate", "equity_risk_premium", "tax_rate",
+    "max_concall_transcripts", "news_lookback_days", "risk_free_rate", "equity_risk_premium", "country_default_spread",
+    "blume_adjust_beta", "roll_forward_target", "reality_check_threshold", "tax_rate",
     "terminal_growth_cap", "dcf_weight", "scenario_probabilities", "scenario_multiple_factors",
     "margin_of_safety", "rating_bands", "firm_name", "analyst_name", "port", "open_browser",
-    "research_brief", "council_followup",
+    "research_brief", "council_followup", "council_recheck", "block_incomplete_reports", "reality_check_revision",
+    "cio_valuation_challenge", "call_id_floor", "filings_chars_per_document", "max_presentations",
+    "max_announcements_read", "web_results", "web_text_chars",
 ]
 
 _ENV_MAP: dict[str, tuple[str, type]] = {

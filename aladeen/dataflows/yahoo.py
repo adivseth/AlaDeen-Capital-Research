@@ -15,6 +15,8 @@ _INFO_KEYS = [
     "priceToBook", "enterpriseValue", "enterpriseToEbitda", "averageVolume", "averageVolume10days",
     "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "bookValue", "trailingEps", "heldPercentInsiders",
     "heldPercentInstitutions", "longBusinessSummary", "fullTimeEmployees",
+    "targetMeanPrice", "targetMedianPrice", "targetHighPrice", "targetLowPrice", "numberOfAnalystOpinions",
+    "recommendationKey",
 ]
 
 
@@ -51,6 +53,14 @@ def snapshot(symbol: str) -> dict[str, Any]:
     except Exception as e:
         out["info"] = {}
         out["info_error"] = str(e)
+    try:  # corporate actions: per-share history must be read with these in mind
+        sp = t.splits
+        out["splits"] = {str(d.date()): float(r) for d, r in sp.items()} if sp is not None and len(sp) else {}
+        dv = t.dividends
+        out["dividends"] = ({str(d.date()): float(x) for d, x in dv.tail(12).items()}
+                            if dv is not None and len(dv) else {})
+    except Exception as e:  # noqa: BLE001
+        out["actions_error"] = str(e)
     try:
         fin = t.financials
         if fin is not None and not fin.empty:

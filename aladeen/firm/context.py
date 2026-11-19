@@ -148,8 +148,10 @@ def peers_md(fp: FactPack, q: dict) -> str:
                       index=[p["Company"] for p in fp.peers])
     pm = q["peers"]
     return ("## Peer comparison (source Screener.in)\n" + df_md(df, 2) +
-            f"\n\nPeer median P/E (excluding the company): {fmt(pm.get('peer_pe_median'), 'x')} "
-            f"from {pm.get('peer_count')} peers.")
+            f"\n\nPeer median P/E (excluding the company and peers outside 0.25x-4x its market cap): "
+            f"{fmt(pm.get('peer_pe_median'), 'x')} from {pm.get('peer_count')} peers"
+            + (f"; excluded for size: {', '.join(pm['peers_dropped_for_size'])}" if pm.get("peers_dropped_for_size") else "")
+            + ".")
 
 
 def technicals_md(q: dict) -> str:
@@ -211,7 +213,20 @@ def news_md(fp: FactPack, limit: int = 30) -> str:
     anns = fp.screener.get("documents", {}).get("announcements", [])
     if anns:
         lines += ["", "## Recent exchange announcements (BSE via Screener)"]
-        lines += [f"- {a.get('date')}: {a['title']} — {a.get('summary', '')}" for a in anns]
+        for a in anns:
+            lines.append(f"- {a.get('date')}: {a['title']} — {a.get('summary', '')}")
+            if a.get("text"):
+                lines.append("  Filing text: " + " ".join(a["text"].split())[:1500])
+    return "\n".join(lines)
+
+
+def corporate_actions_md(fp: FactPack) -> str:
+    y = fp.yahoo or {}
+    lines = ["## Corporate actions (Yahoo Finance)"]
+    sp, dv = y.get("splits") or {}, y.get("dividends") or {}
+    lines.append("- Splits: " + (", ".join(f"{d} ({r:g}:1)" for d, r in sp.items()) or "none recorded"))
+    lines.append("- Recent dividends per share (₹, as adjusted by Yahoo): "
+                 + (", ".join(f"{d} {x:g}" for d, x in dv.items()) or "none recorded"))
     return "\n".join(lines)
 
 
@@ -253,13 +268,14 @@ def warnings_md(fp: FactPack, extra: list[str] | None = None) -> str:
 
 def valuation_md(res: dict) -> str:
     c = res["capital"]
-    lines = [
-        f"## Valuation (method: {res['method']}; all arithmetic in code)",
-        f"- Cost of equity {fmt(c['cost_of_equity'], 'pct', 2)} = Rf {fmt(c['risk_free'], 'pct', 2)} + "
-        f"beta {c['beta']:.2f} x ERP {fmt(c['erp'], 'pct', 2)}",
-        f"- Cost of debt (pre-tax) {fmt(c['cost_of_debt_pre_tax'], 'pct', 2)}; tax {fmt(c['tax_rate'], 'pct', 2)}; "
-        f"debt/capital {fmt(c['debt_to_capital'], 'pct', 1)}; WACC {fmt(c['wacc'], 'pct', 2)}",
-    ]
+    ke_line = (f"- Cost of equity {fmt(c['cost_of_equity'], 'pct', 2)} = riskless {fmt(c.get('riskless_rate', c['risk_free']), 'pct', 2)} "
+               f"(G-Sec {fmt(c['risk_free'], 'pct', 2)} less default spread {fmt(c.get('default_spread', 0.0), 'pct', 2)}) + "
+               f"beta {c['beta']:.2f} x ERP {fmt(c['erp'], 'pct', 2)}"
+               + (f" + premium {fmt(c['premium'], 'pct', 2)}" if c.get("premium") else ""))
+    lines = [f"## Valuation (method: {res['method']}; all arithmetic in code)", ke_line]
+    if res["method"] != "residual_income":
+        lines.append(f"- Cost of debt (pre-tax) {fmt(c['cost_of_debt_pre_tax'], 'pct', 2)}; tax {fmt(c['tax_rate'], 'pct', 2)}; "
+                     f"debt/capital {fmt(c['debt_to_capital'], 'pct', 1)}; WACC {fmt(c['wacc'], 'pct', 2)}")
     d = res.get("dcf")
     if d:
         inp = res["inputs"]["dcf"]
@@ -274,23 +290,48 @@ def valuation_md(res: dict) -> str:
             f"({fmt(d['tv_share_of_ev'], 'pct', 0)} of EV); EV {fmt(d['enterprise_value'], 'cr')}; "
             f"equity {fmt(d['equity_value'], 'cr')}; DCF value/share {fmt(d['per_share'], 'inr')}",
         ]
-    jp = res.get("justified_pb")
-    if jp:
-        lines.append(f"- Justified P/B {jp['justified_pb']:.2f}x (ROE {fmt(jp['roe'], 'pct')}, "
-                     f"g {fmt(jp['growth'], 'pct')}, Ke {fmt(jp['cost_of_equity'], 'pct')}) x BVPS "
-                     f"{fmt(jp['bvps'], 'inr')} = {fmt(jp['per_share'], 'inr')}")
+    ri = res.get("residual_income")
+    if ri:
+        lines += [
+            f"- Book value {fmt(ri['bv0'], 'cr')} at {ri['bv_date']} ({fmt(ri['bvps0'], 'inr')} per share); ROE path "
+            + ", ".join(fmt(p_['roe'], 'pct') for p_ in ri["projections"])
+            + f"; sustainable ROE {fmt(ri['terminal_roe'], 'pct')}; payout {fmt(ri['payout'], 'pct')}; terminal growth "
+            f"{fmt(ri['terminal_growth'], 'pct')}",
+            f"- PV of explicit residual income {fmt(ri['pv_explicit_ri'], 'cr')}; PV terminal {fmt(ri['pv_terminal'], 'cr')} "
+            f"({fmt(ri['tv_share_of_value'], 'pct', 0)} of value); equity {fmt(ri['equity_value'], 'cr')} = "
+            f"{fmt(ri['implied_pb'], 'x', 2)} book; residual-income value/share {fmt(ri['per_share'], 'inr')}",
+        ]
+        jp = res.get("justified_pb")
+        if jp:
+            lines.append(f"- Cross-check: one-stage justified P/B at the sustainable ROE {jp['justified_pb']:.2f}x")
+        if res.get("implied_roe_at_cmp") is not None:
+            lines.append(f"- Steady ROE implied by the current price: {fmt(res['implied_roe_at_cmp'], 'pct')}")
     mu = res["multiples"]
-    lines.append(f"- Peer median P/E {fmt(mu.get('peer_pe_median'), 'x')} x TTM EPS {fmt(mu.get('eps_ttm'), 'inr', 2)} "
-                 f"= {fmt(mu.get('implied_price'), 'inr')}")
-    lines.append("- Scenarios: " + "; ".join(
-        f"{k} {fmt(v['value'], 'inr')} (p={v['probability']:.0%})" for k, v in res["scenarios"].items()))
+    if res["method"] == "residual_income":
+        hist = ", ".join(f"{x['fy']} {x['pb']:.2f}x" for x in mu.get("pb_history", []))
+        lines.append(f"- Relative: own 5-year median P/B {fmt(mu.get('pb_anchor'), 'x', 2)} ({hist or 'n/a'}) x book value "
+                     f"per share {fmt(mu.get('bvps'), 'inr')} = {fmt(mu.get('implied_price'), 'inr')}; peer median P/E "
+                     f"{fmt(mu.get('peer_pe_median'), 'x')} (context only)")
+    else:
+        lines.append(f"- Peer median P/E {fmt(mu.get('peer_pe_median'), 'x')} ({mu.get('peer_count')} size-comparable peers) "
+                     f"x TTM EPS {fmt(mu.get('eps_ttm'), 'inr', 2)} = {fmt(mu.get('implied_price'), 'inr')}")
+    lines.append("- Scenarios (value today -> 12-month value): " + "; ".join(
+        f"{k} {fmt(v.get('value_today', v['value']), 'inr')} -> {fmt(v['value'], 'inr')} (p={v['probability']:.0%})"
+        for k, v in res["scenarios"].items()))
+    rf = (res.get("inputs") or {}).get("roll_forward") or {}
     lines += [
-        f"- Probability-weighted target {fmt(res['target_price'], 'inr')}; upside {fmt(res['upside'], 'pct')}; "
+        f"- Probability-weighted value today {fmt(res.get('value_today'), 'inr')}"
+        + (f"; 12-month target = value x (1 + Ke) less year-1 dividend {fmt(rf.get('dps_year1'), 'inr', 2)}"
+           if rf.get("applied") else "")
+        + f": {fmt(res['target_price'], 'inr')}; upside {fmt(res['upside'], 'pct')}; "
         f"dividend yield {fmt(res['dividend_yield'], 'pct', 2)}; expected total return {fmt(res['total_return'], 'pct')}",
         f"- Rating implied by bands (BUY >15%, HOLD 0-15%, SELL <0%): {res['band_rating']}",
-        f"- Margin of safety at CMP vs base value: {fmt(res['margin_of_safety'], 'pct')}; entry price for 33% MoS "
+        f"- Margin of safety at CMP vs base value today: {fmt(res['margin_of_safety'], 'pct')}; entry price for 33% MoS "
         f"{fmt(res['entry_price_for_mos'], 'inr')}",
     ]
+    rc = res.get("reality_check") or {}
+    if rc.get("message"):
+        lines.append(f"- {rc['message']}")
     g = res.get("graham", {})
     lines.append(f"- Graham number {fmt(g.get('graham_number'), 'inr')}; Graham formula value "
                  f"{fmt(g.get('graham_formula_value'), 'inr')} (g {g.get('graham_growth_pct')}%, "
@@ -309,4 +350,4 @@ def valuation_md(res: dict) -> str:
 def full_fact_sheet(fp: FactPack, q: dict) -> str:
     return "\n\n".join([company_md(fp), market_md(q), financials_md(q), reconciliation_md(q),
                         shareholding_md(fp), peers_md(fp, q), technicals_md(q), short_term_md(q, fp),
-                        news_md(fp), documents_index_md(fp), warnings_md(fp)])
+                        news_md(fp), corporate_actions_md(fp), documents_index_md(fp), warnings_md(fp)])

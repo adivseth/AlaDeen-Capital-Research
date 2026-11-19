@@ -8,7 +8,10 @@ are left to sheet formulas and are never written by this code.
 from __future__ import annotations
 
 import csv
+import io
 from pathlib import Path
+
+import requests
 
 COLUMNS = [
     "call_id", "call_date", "company", "ticker", "rating", "target_price", "close_on_call_date",
@@ -20,14 +23,29 @@ FORMULA_COLUMNS = {"stock_return", "benchmark_return", "alpha", "verdict"}  # M-
 
 
 class CSVStore:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, id_floor: int = 0, mirror: SheetReader | None = None):
         self.path = Path(path).expanduser()
+        self.id_floor = id_floor
+        self.mirror = mirror  # read-only copy of a shared sheet: earlier calls and the next call ID
+        self.mirror_error: str | None = None
 
-    def read(self) -> list[dict]:
+    def _local(self) -> list[dict]:
         if not self.path.exists():
             return []
         with self.path.open(newline="", encoding="utf-8") as f:
             return [{c: r.get(c, "") for c in COLUMNS} for r in csv.DictReader(f)]
+
+    def read(self) -> list[dict]:
+        rows = self._local()
+        if self.mirror:
+            try:
+                shared = self.mirror.read()
+                self.mirror_error = None
+            except Exception as e:  # noqa: BLE001 - the local log still works without the shared sheet
+                shared, self.mirror_error = [], str(e)
+            seen = {r["call_id"] for r in rows}
+            rows = [r for r in shared if r["call_id"] not in seen] + rows
+        return rows
 
     def write(self, rows: list[dict]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -40,15 +58,49 @@ class CSVStore:
         tmp.replace(self.path)
 
     def append(self, row: dict) -> dict:
-        rows = self.read()
+        local = self._local()
         row = {c: row.get(c, "") for c in COLUMNS}
-        row["call_id"] = row["call_id"] or next_call_id(rows)
-        rows.append(row)
-        self.write(rows)
+        row["call_id"] = row["call_id"] or next_call_id(self.read(), self.id_floor)
+        if self.mirror:
+            note = ("Not yet in the shared sheet: add this row there (columns A-L, Q-S)."
+                    + (f" The sheet could not be read ({self.mirror_error}); check the call ID." if self.mirror_error else ""))
+            row["notes"] = (row["notes"] + " " if row["notes"] else "") + note
+        local.append(row)
+        self.write(local)
         return row
 
     def describe(self) -> str:
-        return str(self.path)
+        return str(self.path) + (f" (IDs continue from {self.mirror.describe()})" if self.mirror else "")
+
+
+class SheetReader:
+    """Read-only view of a Google Sheet shared as "anyone with the link can view" (CSV export, no key)."""
+
+    def __init__(self, spreadsheet_id: str, gid: str | None = None, session=requests, timeout: int = 20):
+        self.sid, self.gid, self.session, self.timeout = spreadsheet_id, gid, session, timeout
+
+    def read(self) -> list[dict]:
+        url = f"https://docs.google.com/spreadsheets/d/{self.sid}/export?format=csv"
+        if self.gid:
+            url += f"&gid={self.gid}"
+        r = self.session.get(url, timeout=self.timeout)
+        if not r.ok or "text/csv" not in r.headers.get("content-type", ""):
+            raise RuntimeError(f"Google Sheet {self.sid} is not readable without a key (HTTP {r.status_code})")
+        values = list(csv.reader(io.StringIO(r.text)))
+        return _rows_from_values(values)
+
+    def describe(self) -> str:
+        return f"Google Sheet {self.sid} (read-only)"
+
+
+def _rows_from_values(values: list[list[str]]) -> list[dict]:
+    rows = []
+    for v in values[1:]:
+        if not any(x.strip() for x in v[:3]):
+            continue
+        v = v + [""] * (len(COLUMNS) - len(v))
+        rows.append(dict(zip(COLUMNS, v[: len(COLUMNS)], strict=True)))
+    return rows
 
 
 class GSheetsStore:
@@ -64,14 +116,7 @@ class GSheetsStore:
         self.sid = spreadsheet_id
 
     def read(self) -> list[dict]:
-        values = self.ws.get_all_values()
-        rows = []
-        for v in values[1:]:
-            if not any(x.strip() for x in v[:3]):
-                continue
-            v = v + [""] * (len(COLUMNS) - len(v))
-            rows.append(dict(zip(COLUMNS, v[: len(COLUMNS)], strict=True)))
-        return rows
+        return _rows_from_values(self.ws.get_all_values())
 
     def _write_row(self, row_num: int, row: dict) -> None:
         a_l = [row.get(c, "") for c in COLUMNS[:12]]
@@ -87,27 +132,36 @@ class GSheetsStore:
         rows = self.read()
         row = {c: row.get(c, "") for c in COLUMNS}
         row["call_id"] = row["call_id"] or next_call_id(rows)
-        self._write_row(len(rows) + 2, row)
+        self._write_row(len(rows) + 2, row)  # rows skips blank lines; the formula columns M-P are untouched
         return row
 
     def describe(self) -> str:
         return f"Google Sheet {self.sid}"
 
 
-def next_call_id(rows: list[dict]) -> str:
-    nums = []
+def next_call_id(rows: list[dict], floor: int = 0) -> str:
+    nums = [int(floor or 0)]
     for r in rows:
         cid = str(r.get("call_id", ""))
         if cid.startswith("AC-") and cid[3:].isdigit():
             nums.append(int(cid[3:]))
-    return f"AC-{(max(nums) + 1 if nums else 1):03d}"
+    return f"AC-{max(nums) + 1:03d}"
+
+
+def _has_service_account(cfg: dict) -> bool:
+    if cfg.get("gsheets_credentials"):
+        return Path(cfg["gsheets_credentials"]).expanduser().exists()
+    return (Path.home() / ".config" / "gspread" / "service_account.json").exists()
 
 
 def store_from_config(cfg: dict):
-    if cfg.get("gsheets_spreadsheet_id"):
-        return GSheetsStore(cfg["gsheets_spreadsheet_id"], cfg.get("gsheets_worksheet", "Calls"),
-                            cfg.get("gsheets_credentials"))
-    return CSVStore(cfg["call_log_path"])
+    """Google Sheets when a service-account key is set up; otherwise the local CSV, reading a shared sheet
+    (if one is configured and link-viewable) so earlier calls and the call ID sequence stay in step."""
+    sid = cfg.get("gsheets_spreadsheet_id")
+    if sid and _has_service_account(cfg):
+        return GSheetsStore(sid, cfg.get("gsheets_worksheet", "Calls"), cfg.get("gsheets_credentials"))
+    mirror = SheetReader(sid, cfg.get("gsheets_gid")) if sid else None
+    return CSVStore(cfg["call_log_path"], id_floor=int(cfg.get("call_id_floor") or 0), mirror=mirror)
 
 
 def prior_calls(rows: list[dict], yahoo_symbol: str) -> list[dict]:

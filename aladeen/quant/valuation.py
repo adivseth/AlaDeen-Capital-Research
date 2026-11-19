@@ -1,9 +1,18 @@
-"""Valuation engine: WACC, FCFF DCF, sensitivity, justified P/B, Graham, peers, scenarios, rating.
+"""Valuation engine: WACC, FCFF DCF, residual income (banks), sensitivity, Graham, peers, scenarios, rating.
 
 The valuation analyst (an LLM) proposes *assumptions* with reasons. This module does
-every calculation. Methodology follows Damodaran (FCFF, stable-growth terminal value
-with reinvestment = g / ROC) and Graham (formula value, Graham number, NCAV, defensive
-checklist), calibrated for India. See aladeen/knowledge/*.md.
+every calculation. Methodology follows Damodaran (FCFF with stable-growth terminal value
+and reinvestment = g / ROC; excess-return / residual-income model for banks, NBFCs and
+insurers) and Graham (formula value, Graham number, NCAV, defensive checklist),
+calibrated for India. See aladeen/knowledge/*.md.
+
+Cost of equity: when the equity risk premium is a *total* country ERP (Damodaran's India
+figure already contains the country risk premium), the INR risk-free rate is the G-Sec
+yield less the sovereign default spread; otherwise country risk is counted twice.
+
+The 12-month target rolls today's value forward one year at the cost of equity, less the
+dividend paid. A stock priced at fair value is therefore expected to return its cost of
+equity, not zero.
 """
 
 from __future__ import annotations
@@ -38,16 +47,22 @@ class DCFInputs:
 
 @dataclass
 class CapitalInputs:
-    risk_free: float
+    risk_free: float  # G-Sec yield
     beta: float
     erp: float
     cost_of_debt_pre_tax: float
     tax_rate: float
     debt_to_capital: float
+    default_spread: float = 0.0  # sovereign default spread netted off the G-Sec yield
+    premium: float = 0.0  # company-specific premium, only with a stated reason
+
+    @property
+    def riskless_rate(self) -> float:
+        return self.risk_free - self.default_spread
 
     @property
     def cost_of_equity(self) -> float:
-        return self.risk_free + self.beta * self.erp
+        return self.riskless_rate + self.beta * self.erp + self.premium
 
     @property
     def wacc(self) -> float:
@@ -63,11 +78,36 @@ class ScenarioShift:
     roe_pp: float = 0.0  # financials only
 
 
+# Symmetric by default: the bear and bull cases move each driver by the same amount.
 DEFAULT_SHIFTS = {
-    "bear": ScenarioShift(growth_pp=-0.03, margin_pp=-0.02, wacc_pp=0.01, roe_pp=-0.03),
+    "bear": ScenarioShift(growth_pp=-0.02, margin_pp=-0.015, wacc_pp=0.005, roe_pp=-0.02),
     "base": ScenarioShift(),
     "bull": ScenarioShift(growth_pp=0.02, margin_pp=0.015, wacc_pp=-0.005, roe_pp=0.02),
 }
+
+
+@dataclass
+class BankInputs:
+    """Inputs to the residual-income model. ROE path and payout are decimals."""
+
+    bv0_cr: float  # net worth at the latest balance-sheet date, Rs Cr
+    bv_date: str
+    roe_path: list[float]  # explicit years, starting the year after bv_date
+    terminal_roe: float
+    payout: float  # dividend payout ratio over the explicit years
+    terminal_growth: float
+
+    def shifted(self, roe_pp: float = 0.0) -> BankInputs:
+        d = asdict(self)
+        d["roe_path"] = [r + roe_pp for r in self.roe_path]
+        d["terminal_roe"] = self.terminal_roe + roe_pp
+        return BankInputs(**d)
+
+
+def default_roe_path(roe_now: float, roe_term: float, years: int = 10, fade: int = 5) -> list[float]:
+    """Linear fade from the current ROE to the normalised ROE over ``fade`` years, then flat."""
+    fade = max(1, min(fade, years))
+    return [round(roe_now + (roe_term - roe_now) * min(t, fade) / fade, 4) for t in range(1, years + 1)]
 
 
 # --------------------------------------------------------------------------- DCF
@@ -135,6 +175,90 @@ def sensitivity(inp: DCFInputs, wacc: float, net_debt: float, minority: float, s
 
 
 # --------------------------------------------------------------------------- financials
+def residual_income(inp: BankInputs, ke: float, shares_cr: float) -> dict:
+    """Excess-return model: equity = BV0 + sum PV[(ROE_t - Ke) x BV_{t-1}] + PV(terminal RI).
+
+    Terminal RI = (ROE_T - Ke) x BV_n / (Ke - g), discounted from the end of year n.
+    Book value grows by retained profit: BV_t = BV_{t-1} x (1 + ROE_t x (1 - payout)).
+    """
+    if ke <= inp.terminal_growth:
+        raise ValueError(f"Cost of equity {ke:.2%} must exceed terminal growth {inp.terminal_growth:.2%}")
+    rows, bv, pv = [], inp.bv0_cr, 0.0
+    for t, roe in enumerate(inp.roe_path, start=1):
+        ni = roe * bv
+        ri = (roe - ke) * bv
+        df = 1 / (1 + ke) ** t
+        pv += ri * df
+        rows.append({"year": t, "bv_open": bv, "roe": roe, "net_income": ni, "dividend": ni * inp.payout,
+                     "residual_income": ri, "discount_factor": df, "pv_ri": ri * df})
+        bv = bv + ni * (1 - inp.payout)
+    df_n = rows[-1]["discount_factor"] if rows else 1.0
+    tv = (inp.terminal_roe - ke) * bv / (ke - inp.terminal_growth)
+    pv_tv = tv * df_n
+    equity = inp.bv0_cr + pv + pv_tv
+    return {
+        "projections": rows, "bv0": inp.bv0_cr, "bv_date": inp.bv_date, "pv_explicit_ri": pv,
+        "terminal_ri": tv, "pv_terminal": pv_tv, "bv_end": bv, "equity_value": equity,
+        "shares_cr": shares_cr, "per_share": equity / shares_cr if shares_cr else None,
+        "implied_pb": equity / inp.bv0_cr if inp.bv0_cr else None,
+        "tv_share_of_value": pv_tv / equity if equity else None,
+        "dps_year1": rows[0]["dividend"] / shares_cr if rows and shares_cr else 0.0,
+        "bvps0": inp.bv0_cr / shares_cr if shares_cr else None,
+        "cost_of_equity": ke, "terminal_roe": inp.terminal_roe, "terminal_growth": inp.terminal_growth,
+        "payout": inp.payout,
+    }
+
+
+def implied_roe(price: float, inp: BankInputs, ke: float, shares_cr: float) -> float | None:
+    """Flat ROE (every year and terminal) at which the residual-income value equals the price."""
+    def gap(r: float) -> float:
+        flat = BankInputs(**{**asdict(inp), "roe_path": [r] * len(inp.roe_path), "terminal_roe": r})
+        return residual_income(flat, ke, shares_cr)["per_share"] - price
+
+    lo, hi = -0.10, 0.60
+    if gap(lo) > 0 or gap(hi) < 0:
+        return None
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if gap(mid) < 0 else (lo, mid)
+    return (lo + hi) / 2
+
+
+def bank_sensitivity(inp: BankInputs, ke: float, shares_cr: float, ke_step: float = 0.005,
+                     roe_step: float = 0.01, n: int = 2) -> dict:
+    kes = [round(ke + i * ke_step, 4) for i in range(-n, n + 1)]
+    roes = [round(inp.terminal_roe + i * roe_step, 4) for i in range(-n, n + 1)]
+    grid = []
+    for r in roes:
+        row = []
+        for k in kes:
+            if k <= inp.terminal_growth + 0.005:
+                row.append(None)
+                continue
+            shifted = inp.shifted(r - inp.terminal_roe)
+            row.append(residual_income(shifted, k, shares_cr)["per_share"])
+        grid.append(row)
+    return {"cost_of_equity": kes, "terminal_roe": roes, "values": grid}
+
+
+def historical_pb(prices: pd.DataFrame, bvps_by_fy: pd.Series, years: int = 5) -> dict:
+    """Price / book at each fiscal year-end (31 March) over the last ``years`` years."""
+    out = []
+    if prices is None or prices.empty or bvps_by_fy is None or "close" not in prices:
+        return {"points": [], "median": None}
+    close = prices["close"].dropna()
+    for label, bv in bvps_by_fy.dropna().items():
+        if not str(label).startswith("FY") or not bv or bv <= 0:
+            continue
+        fy_end = pd.Timestamp(f"20{str(label)[2:4]}-03-31")
+        px = close[close.index <= fy_end]
+        if px.empty or (fy_end - px.index[-1]).days > 10:
+            continue
+        out.append({"fy": label, "price": float(px.iloc[-1]), "bvps": float(bv), "pb": float(px.iloc[-1] / bv)})
+    out = out[-years:]
+    return {"points": out, "median": statistics.median(p["pb"] for p in out) if out else None}
+
+
 def justified_pb(bvps: float, roe: float, growth: float, cost_of_equity: float) -> dict:
     """Gordon-based justified P/B = (ROE - g) / (Ke - g). Used for banks / NBFCs / insurers."""
     if cost_of_equity <= growth:
@@ -214,23 +338,39 @@ def graham_checklist(annual: pd.DataFrame, cmp_: float, current_ratio: float | N
 
 
 # --------------------------------------------------------------------------- peers
-def peer_multiples(peers: list[dict], self_names: list[str]) -> dict:
+def _is_self(p: dict, names: set[str], slugs: set[str]) -> bool:
+    nm = (p.get("Company") or "").lower()
+    if not nm or nm in names or any(n.startswith(nm) or nm.startswith(n) for n in names):
+        return True
+    url = (p.get("url") or "").lower()
+    return any(f"/company/{s}/" in url for s in slugs)
+
+
+def peer_multiples(peers: list[dict], self_names: list[str], market_cap_cr: float | None = None,
+                   size_band: float = 0.25) -> dict:
+    """Median peer P/E, excluding the company itself and, when market caps are known, peers smaller
+    than ``size_band`` x or larger than 1/``size_band`` x the company."""
     names = {n.lower() for n in self_names if n}
-    pes, used = [], []
+    slugs = {n.lower() for n in self_names if n and " " not in n}
+    pes, used, dropped = [], [], []
     sector_median = None
     for p in peers:
         nm = (p.get("Company") or "").lower()
         if nm.startswith("median"):
             sector_median = p
             continue
-        if not nm or nm in names or any(n.startswith(nm) or nm.startswith(n) for n in names):
+        if _is_self(p, names, slugs):
+            continue
+        cap = p.get("Mar Cap Rs.Cr.")
+        if market_cap_cr and cap and not (size_band * market_cap_cr <= cap <= market_cap_cr / size_band):
+            dropped.append(p.get("Company"))
             continue
         pe = p.get("P/E")
         if pe is not None and 0 < pe < 150:
             pes.append(pe)
             used.append(p.get("Company"))
     return {"peer_pe_median": statistics.median(pes) if pes else None, "peers_used": used,
-            "peer_count": len(pes), "sector_median_row": sector_median}
+            "peer_count": len(pes), "peers_dropped_for_size": dropped, "sector_median_row": sector_median}
 
 
 # --------------------------------------------------------------------------- rating
@@ -252,6 +392,10 @@ class ValuationResult:
     dcf: dict | None = None
     sensitivity: dict | None = None
     justified_pb: dict | None = None
+    residual_income: dict | None = None
+    implied_roe_at_cmp: float | None = None
+    value_today: float = 0.0  # probability-weighted value today, before the 12-month roll-forward
+    reality_check: dict = field(default_factory=dict)
     multiples: dict = field(default_factory=dict)
     scenarios: dict = field(default_factory=dict)
     target_price: float = 0.0
@@ -273,42 +417,69 @@ class ValuationResult:
 def run_valuation(*, cmp_: float, shares_cr: float, capital: CapitalInputs, cfg: dict,
                   dcf_inputs: DCFInputs | None, net_debt: float, minority: float,
                   eps_ttm: float | None, bvps: float | None, peers: dict,
-                  financial: bool, roe: float | None = None, bank_growth: float | None = None,
+                  financial: bool, bank_inputs: BankInputs | None = None, pb_anchor: dict | None = None,
                   dividend_yield: float = 0.0, shifts: dict[str, ScenarioShift] | None = None,
-                  graham_inputs: dict | None = None) -> ValuationResult:
+                  graham_inputs: dict | None = None, consensus: dict | None = None) -> ValuationResult:
     shifts = shifts or DEFAULT_SHIFTS
     w = cfg["dcf_weight"]
     probs = cfg["scenario_probabilities"]
     factors = cfg["scenario_multiple_factors"]
-    res = ValuationResult(method="justified_pb" if financial else "fcff_dcf", cmp=cmp_,
+    ke = capital.cost_of_equity
+    res = ValuationResult(method="residual_income" if financial else "fcff_dcf", cmp=cmp_,
                           shares_cr=shares_cr,
-                          capital={**asdict(capital), "cost_of_equity": capital.cost_of_equity,
-                                   "wacc": capital.wacc},
+                          capital={**asdict(capital), "riskless_rate": capital.riskless_rate,
+                                   "cost_of_equity": ke, "wacc": None if financial else capital.wacc},
                           dividend_yield=dividend_yield)
-    res.inputs = {"dcf": asdict(dcf_inputs) if dcf_inputs else None, "net_debt": net_debt,
-                  "minority": minority, "eps_ttm": eps_ttm, "bvps": bvps, "roe": roe,
-                  "bank_growth": bank_growth,
+    res.inputs = {"dcf": asdict(dcf_inputs) if dcf_inputs else None,
+                  "bank": asdict(bank_inputs) if bank_inputs else None, "net_debt": net_debt,
+                  "minority": minority, "eps_ttm": eps_ttm, "bvps": bvps,
                   "shifts": {k: asdict(v) for k, v in shifts.items()}, "dcf_weight": w}
 
+    # Relative leg: banks use the company's own median P/B over five fiscal year-ends (book is the
+    # anchor for a lender); others use the median P/E of size-comparable peers.
     mult_price = None
-    if peers.get("peer_pe_median") and eps_ttm and eps_ttm > 0:
-        mult_price = peers["peer_pe_median"] * eps_ttm
-    res.multiples = {**peers, "eps_ttm": eps_ttm, "implied_price": mult_price}
+    if financial:
+        pba = (pb_anchor or {}).get("median")
+        if pba and bvps:
+            mult_price = pba * bvps
+        res.multiples = {**peers, "eps_ttm": eps_ttm, "basis": "own 5-year median P/B x latest book",
+                         "pb_anchor": pba, "pb_history": (pb_anchor or {}).get("points", []), "bvps": bvps,
+                         "implied_price": mult_price}
+        if mult_price is None:
+            res.warnings.append("No P/B history: target uses the residual-income value only.")
+    else:
+        if peers.get("peer_pe_median") and eps_ttm and eps_ttm > 0:
+            mult_price = peers["peer_pe_median"] * eps_ttm
+        res.multiples = {**peers, "eps_ttm": eps_ttm, "basis": "median P/E of size-comparable peers x TTM EPS",
+                         "implied_price": mult_price}
+        if mult_price is None:
+            res.warnings.append("No usable peer P/E: target uses the intrinsic method only.")
     if mult_price is None:
-        res.warnings.append("No usable peer P/E: target uses the intrinsic method only.")
         w = 1.0
     res.inputs["dcf_weight_used"] = w
 
     intrinsic: dict[str, float] = {}
+    dps1 = cmp_ * dividend_yield
     if financial:
-        if roe is None or bvps is None:
-            raise ValueError("Financial-sector valuation needs ROE and book value per share")
-        g = min(bank_growth if bank_growth is not None else cfg["terminal_growth_cap"],
-                cfg["terminal_growth_cap"])
-        res.justified_pb = justified_pb(bvps, roe, g, capital.cost_of_equity)
+        if bank_inputs is None:
+            raise ValueError("Financial-sector valuation needs book value and an ROE path")
+        g_cap = cfg["terminal_growth_cap"]
+        if bank_inputs.terminal_growth > g_cap:
+            res.warnings.append(f"Terminal growth capped at {g_cap:.1%} (nominal GDP proxy).")
+            bank_inputs.terminal_growth = g_cap
+            res.inputs["bank"] = asdict(bank_inputs)
+        base = residual_income(bank_inputs, ke, shares_cr)
+        res.residual_income = base
+        dps1 = base["dps_year1"] or dps1
+        res.sensitivity = bank_sensitivity(bank_inputs, ke, shares_cr)
+        res.justified_pb = justified_pb(bvps or base["bvps0"], bank_inputs.terminal_roe,
+                                        bank_inputs.terminal_growth, ke)
+        res.implied_roe_at_cmp = implied_roe(cmp_, bank_inputs, ke, shares_cr)
+        if base["tv_share_of_value"] and base["tv_share_of_value"] > cfg["tv_share_warning"]:
+            res.warnings.append(f"Terminal value is {base['tv_share_of_value']:.0%} of equity value.")
         for s, sh in shifts.items():
-            ke = capital.cost_of_equity + sh.wacc_pp
-            intrinsic[s] = justified_pb(bvps, roe + sh.roe_pp, g, ke)["per_share"]
+            intrinsic[s] = residual_income(bank_inputs.shifted(sh.roe_pp), ke + sh.wacc_pp,
+                                           shares_cr)["per_share"]
     else:
         if dcf_inputs is None:
             raise ValueError("Non-financial valuation needs DCF inputs")
@@ -329,21 +500,29 @@ def run_valuation(*, cmp_: float, shares_cr: float, capital: CapitalInputs, cfg:
             intrinsic[s] = dcf_fcff(inp, capital.wacc + sh.wacc_pp, net_debt, minority,
                                     shares_cr)["per_share"]
 
+    # Values today, then the 12-month target: value x (1 + Ke) less the year-1 dividend.
+    roll = cfg.get("roll_forward_target", True)
     for s in ("bear", "base", "bull"):
         mval = mult_price * factors[s] if mult_price else None
-        blended = w * intrinsic[s] + (1 - w) * (mval or 0.0)
-        res.scenarios[s] = {"intrinsic": intrinsic[s], "multiples": mval, "value": blended,
-                            "probability": probs[s]}
+        today = w * intrinsic[s] + (1 - w) * (mval or 0.0)
+        value_12m = today * (1 + ke) - dps1 if roll else today
+        res.scenarios[s] = {"intrinsic": intrinsic[s], "multiples": mval, "value_today": today,
+                            "value": value_12m, "probability": probs[s]}
+    res.value_today = sum(v["value_today"] * v["probability"] for v in res.scenarios.values())
     res.target_price = sum(v["value"] * v["probability"] for v in res.scenarios.values())
     res.upside = res.target_price / cmp_ - 1
     res.total_return = res.upside + dividend_yield
     res.band_rating = rating_from_return(res.total_return, cfg["rating_bands"])
-    res.intrinsic_base = res.scenarios["base"]["value"]
+    res.inputs["roll_forward"] = {"applied": roll, "cost_of_equity": ke, "dps_year1": dps1}
+    res.intrinsic_base = res.scenarios["base"]["value_today"]
     res.margin_of_safety = ((res.intrinsic_base - cmp_) / res.intrinsic_base
                             if res.intrinsic_base > 0 else -1.0)
     res.entry_price_for_mos = res.intrinsic_base * (1 - cfg["margin_of_safety"])
     if res.target_price <= 0:
         res.warnings.append("Target price is not positive: equity value is negative under these inputs.")
+    res.reality_check = reality_check(res, cfg, consensus)
+    if res.reality_check.get("flag"):
+        res.warnings.append(res.reality_check["message"])
 
     gi = graham_inputs or {}
     aaa = gi.get("aaa_yield_pct", cfg["risk_free_rate"] * 100)
@@ -356,6 +535,32 @@ def run_valuation(*, cmp_: float, shares_cr: float, capital: CapitalInputs, cfg:
         "checklist": gi.get("checklist", []),
     }
     return res
+
+
+def reality_check(res: ValuationResult, cfg: dict, consensus: dict | None = None) -> dict:
+    """Flag a target far from both the market price and (when known) the broker consensus.
+
+    A large gap is allowed, but it must be explained: the CIO is asked to justify or revise it.
+    """
+    limit = cfg.get("reality_check_threshold", 0.25)
+    vs_price = res.target_price / res.cmp - 1 if res.cmp else None
+    cons = (consensus or {}).get("target_mean")
+    vs_cons = res.target_price / cons - 1 if cons else None
+    far_price = vs_price is not None and abs(vs_price) > limit
+    far_cons = vs_cons is None or abs(vs_cons) > limit
+    flag = bool(far_price and far_cons)
+    parts = [f"target {res.target_price:,.0f} is {vs_price:+.0%} vs CMP {res.cmp:,.0f}"] if vs_price is not None else []
+    if vs_cons is not None:
+        parts.append(f"{vs_cons:+.0%} vs consensus {cons:,.0f} ({(consensus or {}).get('analysts') or 'n/a'} analysts)")
+    else:
+        parts.append("no broker consensus in the fact pack")
+    if res.implied_roe_at_cmp is not None:
+        parts.append(f"the price implies a steady ROE of {res.implied_roe_at_cmp:.1%} at Ke "
+                     f"{res.capital['cost_of_equity']:.1%}")
+    msg = ("Reality check: " + "; ".join(parts) + "." +
+           (f" The gap exceeds {limit:.0%}: explain why the market is wrong, or revise the inputs." if flag else ""))
+    return {"flag": flag, "threshold": limit, "vs_price": vs_price, "vs_consensus": vs_cons,
+            "consensus": consensus or {}, "implied_roe_at_cmp": res.implied_roe_at_cmp, "message": msg}
 
 
 def default_dcf_inputs(annual: pd.DataFrame, cfg: dict, horizon: int = 5) -> DCFInputs:

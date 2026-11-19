@@ -204,3 +204,83 @@ def test_research_brief_reaches_cio_and_desks(cfg, tmp_path):
 
     _run(cfg, tmp_path, OfflineRunner(spy))
     assert {"cio_mandate", "fundamentals", "news"} <= seen
+
+
+def test_incomplete_report_is_a_draft_and_council_rechecks(cfg, tmp_path):
+    from aladeen.firm.schemas import CouncilVerdict
+
+    def gappy(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet and "independent council found these gaps" in user:
+            out = out.model_copy(update={"reviews": [r.model_copy(update={
+                "verdict": "revise" if r.desk == "business" else "accept"}) for r in out.reviews]})
+        if schema is CouncilVerdict:
+            out = out.model_copy(update={"report_complete": False, "gaps_in_report": ["No sector outlook."]})
+        return out
+
+    state, runner, _ = _run(cfg, tmp_path, OfflineRunner(gappy))
+    assert [c["agent"] for c in runner.calls].count("council_chair") == 2  # checked again after the follow-up
+    assert state["council"]["first_verdict"]["report_complete"] is False
+    assert state["report_status"] == "draft" and "No sector outlook" in state["draft_reason"]
+    assert "DRAFT" in Path(state["paths"]["report"]).read_text(encoding="utf-8")
+
+
+def test_complete_report_is_final(cfg, tmp_path):
+    from aladeen.firm.schemas import CouncilVerdict
+
+    def done(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        return out.model_copy(update={"report_complete": True}) if schema is CouncilVerdict else out
+
+    state, _, _ = _run(cfg, tmp_path, OfflineRunner(done))
+    assert state["report_status"] == "final"
+
+
+def test_cio_can_challenge_the_valuation_once(cfg, tmp_path):
+    seen = []
+
+    def challenger(name, schema, system, user):
+        out = demo_responder(name, schema, system, user)
+        if schema is FinalCall and not seen:
+            seen.append(1)
+            out = out.model_copy(update={"valuation_challenge": "Margins are understated: the concall guides higher."})
+        if name == "valuation_rev":
+            assert "Margins are understated" in user and "previous assumptions" in user
+        return out
+
+    state, runner, _ = _run(cfg, tmp_path, OfflineRunner(challenger))
+    names = [c["agent"] for c in runner.calls]
+    assert "valuation_rev" in names and names.count("cio_decision") >= 2
+    assert any(r["by"] == "cio" for r in state["valuation_revisions"])
+    assert state["final"]["rating"] == state["valuation"]["band_rating"]
+
+
+def test_reality_check_sends_valuation_back(cfg, tmp_path):
+    cfg["reality_check_threshold"] = 0.0  # every target is "far" from the price
+    state, runner, _ = _run(cfg, tmp_path)
+    assert "valuation_rev" in [c["agent"] for c in runner.calls]
+    assert state["valuation_revisions"][0]["by"] == "reality_check"
+
+
+def test_debate_openings_do_not_see_the_valuation(cfg, tmp_path):
+    seen = {}
+
+    def spy(name, schema, system, user):
+        seen[name] = user
+        return demo_responder(name, schema, system, user)
+
+    _run(cfg, tmp_path, OfflineRunner(spy))
+    assert "## Valuation (method" not in seen["bull_r0"] and "## Valuation (method" not in seen["bear_r0"]
+    assert "## Valuation (method" in seen["bull_r1"] and "## Valuation (method" in seen["cio_debate"]
+
+
+def test_revision_sees_other_desks(cfg, tmp_path):
+    seen = {}
+
+    def spy(name, schema, system, user):
+        seen[name] = user
+        return demo_responder(name, schema, system, user)
+
+    _run(cfg, tmp_path, OfflineRunner(spy))
+    assert "The other desks' memos" in seen["technical_rev"]
+    assert "Memo — " in seen["technical_rev"]

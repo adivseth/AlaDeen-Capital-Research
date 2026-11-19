@@ -231,7 +231,10 @@ def build_context(state: dict, cfg: dict) -> dict[str, Any]:
         "news": fp.news[:12],
         "announcements": fp.screener.get("documents", {}).get("announcements", []),
         "documents": fp.documents,
-        "warnings": list(dict.fromkeys(fp.warnings + v.get("warnings", []))),
+        "warnings": list(dict.fromkeys(state.get("data_caveats", fp.warnings) + v.get("warnings", []))),
+        "report_status": state.get("report_status", "final"),
+        "draft_reason": state.get("draft_reason", ""),
+        "valuation_revisions": state.get("valuation_revisions", []),
         "sources": [s for s in fp.sources if s.get("url")],
         "prior_calls": state.get("prior_calls", []),
         "published": date.fromisoformat(fp.as_of).strftime("%d-%b-%Y"),
@@ -257,8 +260,9 @@ _ASSUMPTION_LABELS = [
     ("da_pct_revenue", "Depreciation, % of revenue", "pct"), ("capex_pct_revenue", "Capex, % of revenue", "pct"),
     ("nwc_pct_incremental_revenue", "Working capital, % of extra revenue", "pct"),
     ("terminal_growth", "Terminal growth", "pct"), ("stable_roc", "Return on capital in stable growth", "pct"),
-    ("beta", "Beta", "num"), ("sustainable_roe", "Sustainable ROE", "pct"),
-    ("long_term_growth", "Long-term growth", "pct"),
+    ("beta", "Beta", "num"), ("cost_of_equity_premium", "Company-specific premium on Ke", "pct"),
+    ("roe_path", "ROE, years 1-10", "pct_list"), ("sustainable_roe", "Sustainable (terminal) ROE", "pct"),
+    ("payout_ratio", "Dividend payout", "pct"), ("long_term_growth", "Terminal growth", "pct"),
 ]
 
 

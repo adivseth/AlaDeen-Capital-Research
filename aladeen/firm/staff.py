@@ -51,8 +51,15 @@ def _filings_material(runner: Runner, cfg: dict, fp: FactPack) -> str:
     if not docs:
         return "_No annual report or concall text could be read for this run._\n" + cx.documents_index_md(fp)
     if cfg["document_mode"] != "full":
-        per_doc = max(4000, cfg["document_char_budget"] // max(1, len(docs)) * 2)
-        return "\n\n".join(f"### {d['title']} ({d['pages']} pages)\n{d['text'][:per_doc]}" for d in docs)
+        # Each document keeps its own budget; the most recent concall and presentation are read in full.
+        per_doc = cfg.get("filings_chars_per_document", 30000)
+        latest = {next((d["title"] for d in docs if d["kind"] == k), None) for k in ("concall", "presentation")}
+        out = []
+        for d in docs:
+            cap = len(d["text"]) if d["title"] in latest else per_doc
+            cut = "" if len(d["text"]) <= cap else f"\n[... truncated: {len(d['text']) - cap:,} more characters]"
+            out.append(f"### {d['title']} ({d['pages']} pages)\n{d['text'][:cap]}{cut}")
+        return "\n\n".join(out)
     summaries = []
     sys = system_for("document_chunk", cfg)
     for d in docs:
@@ -72,7 +79,7 @@ def _filings_material(runner: Runner, cfg: dict, fp: FactPack) -> str:
 def desk_material(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict) -> str:
     if desk == "fundamentals":
         parts = [cx.company_md(fp), cx.market_md(q), cx.financials_md(q), cx.reconciliation_md(q),
-                 cx.warnings_md(fp)]
+                 cx.corporate_actions_md(fp), cx.warnings_md(fp)]
     elif desk == "business":
         parts = [cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 6), cx.peers_md(fp, q),
                  "## Annual report excerpts\n" + _excerpt(fp, "annual_report", _BIZ_KEYS, 15000),
@@ -86,7 +93,7 @@ def desk_material(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict) -
         parts = [cx.market_md(q), cx.technicals_md(q), cx.short_term_md(q, fp)]
     elif desk == "news":
         parts = [cx.company_md(fp), cx.market_md(q), cx.news_md(fp), cx.short_term_md(q, fp),
-                 cx.web_md(fp, "analysts"), cx.web_md(fp, "history")]
+                 cx.corporate_actions_md(fp), cx.web_md(fp, "analysts"), cx.web_md(fp, "history")]
     elif desk == "filings":
         parts = [cx.company_md(fp), cx.financials_md(q, 5), _filings_material(runner, cfg, fp)]
     else:
@@ -122,7 +129,8 @@ def cio_mandate(runner: Runner, cfg: dict, fp: FactPack, q: dict, prior_md: str)
 
 
 def write_memo(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict, mandate: ResearchMandate,
-               revision_notes: str | None = None, previous: str | None = None) -> tuple[str, str]:
+               revision_notes: str | None = None, previous: str | None = None,
+               peer_memos: dict[str, str] | None = None) -> tuple[str, str]:
     material = desk_material(desk, runner, cfg, fp, q)
     brief = next((b.focus for b in mandate.briefs if b.desk == desk), "")
     head = [brief_md(cfg), f"## CIO brief for you\n{brief}",
@@ -130,6 +138,10 @@ def write_memo(desk: str, runner: Runner, cfg: dict, fp: FactPack, q: dict, mand
     if revision_notes:
         head.append(f"## CIO revision request\n{revision_notes}\n\n## Your previous memo\n{previous}\n\n"
                     "Rewrite the memo in full, fixing every point above.")
+        others = {k: v for k, v in (peer_memos or {}).items() if k != desk}
+        if others:  # a revision sees what the rest of the team found, so the memos do not contradict each other
+            head.append("## The other desks' memos (for consistency; do not copy their numbers unless they are "
+                        "also in your material)\n" + memos_md(others))
     user = "\n\n".join(head + [material])
     text = runner.text(system_for(desk, cfg), user, tier="quick", name=f"{desk}{'_rev' if revision_notes else ''}")
     return text, material
@@ -157,30 +169,56 @@ def cio_decide(runner: Runner, cfg: dict, material: str, verdict: DebateVerdict,
 
 
 # ------------------------------------------------------------------ valuation, debate, risk
+def default_assumptions(q: dict, cfg: dict) -> dict:
+    if not q["is_financial"]:
+        d = q.get("default_dcf_inputs")
+        return d.__dict__ if d else {}
+    b = q.get("bank") or {}
+    return {"roe_path": b.get("default_roe_path"), "sustainable_roe": b.get("default_terminal_roe"),
+            "payout_ratio": b.get("payout_3y"), "long_term_growth": b.get("default_terminal_growth"),
+            "_context": {"roe_ttm": b.get("roe_ttm"), "roe_history": b.get("roe_history"),
+                         "book_value": q.get("book"),
+                         "pb_history": (b.get("pb_history") or {}).get("points")}}
+
+
+def cost_of_capital_md(q: dict, cfg: dict) -> str:
+    m = q["market"]
+    rf, ds = cfg["risk_free_rate"], cfg.get("country_default_spread", 0.0)
+    return (f"## Cost of capital inputs\nG-Sec {rf:.2%} less sovereign default spread {ds:.2%} = riskless "
+            f"{rf - ds:.2%}; ERP {cfg['equity_risk_premium']:.2%} (total, includes country risk); beta "
+            f"{m['beta']:.2f} (regression {m['beta_raw'] if m['beta_raw'] is None else round(m['beta_raw'], 2)}); "
+            f"tax {cfg['tax_rate']:.2%}; terminal growth cap {cfg['terminal_growth_cap']:.2%}. Sector treatment: "
+            f"{'financial (residual income on book value)' if q['is_financial'] else 'FCFF DCF'}.")
+
+
 def valuation_analyst(runner: Runner, cfg: dict, fp: FactPack, q: dict, memos: dict[str, str],
-                      mandate: ResearchMandate) -> ValuationAssumptions:
-    d = q.get("default_dcf_inputs")
-    defaults = json.dumps(d.__dict__ if d else {"sustainable_roe": q.get("roe_3y_avg"),
-                                                "long_term_growth": cfg["terminal_growth_cap"]})
-    user = "\n\n".join([
+                      mandate: ResearchMandate, challenge: str | None = None,
+                      previous: dict | None = None) -> ValuationAssumptions:
+    defaults = json.dumps(default_assumptions(q, cfg), default=str)
+    parts = [
         "## CIO's key questions\n" + "\n".join(f"- {x}" for x in mandate.key_questions),
         cx.company_md(fp), cx.market_md(q), cx.financials_md(q), cx.peers_md(fp, q),
         f"## Default (history-based) assumptions\n{defaults}",
-        f"## Cost of capital inputs\nRisk-free {cfg['risk_free_rate']:.2%}, ERP {cfg['equity_risk_premium']:.2%}, "
-        f"beta {q['market']['beta']:.2f}, tax {cfg['tax_rate']:.2%}, terminal growth cap "
-        f"{cfg['terminal_growth_cap']:.2%}. Sector treatment: "
-        f"{'financial (justified P/B)' if q['is_financial'] else 'FCFF DCF'}.",
+        cost_of_capital_md(q, cfg),
         memos_md(memos, ("fundamentals", "business", "filings")),
         cx.warnings_md(fp),
-    ])
-    return runner.structured(system_for("valuation", cfg, financial=q["is_financial"]), user,
-                             ValuationAssumptions, tier="deep", name="valuation")
+    ]
+    if challenge:
+        parts.append(f"## Your previous assumptions\n{json.dumps(previous or {}, default=str)}\n\n"
+                     f"## Challenge to the valuation\n{challenge}\n\nRevise the assumptions where the evidence "
+                     "supports the challenge, keep them where it does not, and say which in the rationale.")
+    return runner.structured(system_for("valuation", cfg, financial=q["is_financial"]), "\n\n".join(parts),
+                             ValuationAssumptions, tier="deep", name="valuation_rev" if challenge else "valuation")
 
 
-def debate_material(fp: FactPack, q: dict, valuation: dict, memos: dict[str, str], synthesis: str,
+def debate_material(fp: FactPack, q: dict, valuation: dict | None, memos: dict[str, str], synthesis: str,
                     prior_md: str) -> str:
-    return "\n\n".join([cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 6), cx.valuation_md(valuation),
-                        f"## CIO synthesis of the desk work\n{synthesis}", memos_md(memos), prior_md])
+    """With ``valuation=None`` this is the material for the opening cases: the advocates argue the business
+    first, so the engine's number does not anchor them. Rebuttals and the CIO's ruling see the valuation."""
+    parts = [cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 6)]
+    if valuation is not None:
+        parts.append(cx.valuation_md(valuation))
+    return "\n\n".join(parts + [f"## CIO synthesis of the desk work\n{synthesis}", memos_md(memos), prior_md])
 
 
 def debate_turn(side: str, runner: Runner, cfg: dict, material: str, history: list[dict], round_no: int) -> str:

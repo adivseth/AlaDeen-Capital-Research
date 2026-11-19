@@ -108,15 +108,64 @@ def load_document(http: Http, kind: str, title: str, url: str, period: str | Non
     return doc
 
 
+_QTR = re.compile(r"(Q[1-4])\s*[-_ ]?\s*FY\s*[-_ ]?(\d{2,4})", re.I)
+
+
+def quarter_label(*texts: str | None) -> str | None:
+    """'.../FY-2027/q1/transcript/Q1FY27-Transcript.pdf' -> 'Q1 FY27'. Screener dates a call by when it was
+    posted, so the fiscal quarter is read from the file name where it is there."""
+    for t in texts:
+        m = _QTR.search(t or "")
+        if m:
+            return f"{m.group(1).upper()} FY{m.group(2)[-2:]}"
+    return None
+
+
+def _call_title(kind: str, c: dict, url: str) -> str:
+    q = quarter_label(url, c.get("transcript"), c.get("ppt"))
+    return f"{kind} {c.get('period')}" + (f" ({q})" if q else "")
+
+
 def collect(http: Http, documents: dict, max_annual: int, max_concalls: int, mode: str,
-            budget: int, fallback=None) -> list[Document]:
+            budget: int, fallback=None, max_presentations: int = 2) -> list[Document]:
     out: list[Document] = []
     ars = sorted(documents.get("annual_reports", []), key=lambda d: d.get("year") or 0, reverse=True)
     for ar in ars[:max_annual]:
         out.append(load_document(http, "annual_report", ar["title"], ar["url"],
                                  str(ar.get("year")), mode, budget, fallback))
-    calls = [c for c in documents.get("concalls", []) if c.get("transcript")]
+    concalls = documents.get("concalls", [])
+    calls = [c for c in concalls if c.get("transcript")]
     for c in calls[:max_concalls]:
-        out.append(load_document(http, "concall", f"Concall transcript {c.get('period')}",
+        out.append(load_document(http, "concall", _call_title("Concall transcript", c, c["transcript"]),
                                  c["transcript"], c.get("period"), mode, budget, fallback))
+    # Investor presentations of the latest quarters: often the only document for the newest results.
+    decks = [c for c in concalls if c.get("ppt")][:max_presentations]
+    for c in decks:
+        out.append(load_document(http, "presentation", _call_title("Investor presentation", c, c["ppt"]),
+                                 c["ppt"], c.get("period"), "full", budget, fallback))
     return out
+
+
+def latest_call_gap(documents: dict) -> str | None:
+    """A caveat when the newest results call on the list has no transcript."""
+    concalls = documents.get("concalls", [])
+    if concalls and not concalls[0].get("transcript"):
+        c = concalls[0]
+        q = quarter_label(c.get("ppt"), c.get("recording"))
+        return (f"The latest results call ({c.get('period')}{', ' + q if q else ''}) has no transcript in the "
+                "sources; its investor presentation is used where it could be read.")
+    return None
+
+
+def read_announcements(http: Http, announcements: list[dict], limit: int, chars: int, fallback=None) -> int:
+    """Adds ``text`` (up to ``chars``) to the newest ``limit`` exchange announcements. Returns how many were read."""
+    n = 0
+    for a in announcements[:limit]:
+        if not a.get("url") or a.get("text"):
+            continue
+        d = load_document(http, "announcement", a.get("title", ""), a["url"], a.get("date"), "full", chars,
+                          fallback)
+        if not d.error and d.text.strip():
+            a["text"] = re.sub(r"\[page \d+\]\n", "", d.text)[:chars]
+            n += 1
+    return n

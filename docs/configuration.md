@@ -8,11 +8,15 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 | Key | Env | Default | Source / note |
 |---|---|---|---|
 | `risk_free_rate` | `ALADEEN_RISK_FREE_RATE` | 0.0722 | RBI-reported yield on the benchmark 10Y G-Sec (6.94% GS 2036) for 11-Nov-2026. Update it when you run. |
-| `equity_risk_premium` | `ALADEEN_EQUITY_RISK_PREMIUM` | 0.07 | India total ERP (mature-market ERP + country risk premium). Published estimates for early 2026 ranged ~6–9%; Damodaran publishes updates in January and July. |
+| `equity_risk_premium` | `ALADEEN_EQUITY_RISK_PREMIUM` | 0.0708 | India total ERP (mature-market ERP + country risk premium): Damodaran, *Country Default Spreads and Risk Premiums*, updated 5-Jan-2026. He updates it in January and July. |
+| `country_default_spread` | — | 0.0187 | India adjusted sovereign default spread, same Damodaran table. Subtracted from the G-Sec yield to get the INR riskless rate, because the total ERP above already prices country risk. Set 0 if you use a mature-market ERP instead. |
+| `blume_adjust_beta` | — | on | Adjusted beta = 0.67 × regression beta + 0.33, then bounded to 0.5–2.0. |
+| `roll_forward_target` | — | on | 12-month target = value today × (1 + Ke) − year-1 dividend, so a fairly priced stock is expected to earn its cost of equity. |
+| `reality_check_threshold` | — | 0.25 | A target more than this far from both the price and the broker consensus (or from the price, when no consensus is in the sources) is sent back to the valuation analyst once and flagged to the CIO. |
 | `tax_rate` | — | 0.2517 | Section 115BAA rate. |
 | `terminal_growth_cap` | — | 0.065 | Long-run nominal GDP proxy; terminal growth is capped here. |
 | `rating_bands` | — | buy 0.15 / sell 0.0 | Expected 12-month total return bands. |
-| `dcf_weight` | — | 0.6 | Weight of the intrinsic value in each scenario; the rest is the peer multiple. |
+| `dcf_weight` | — | 0.6 | Weight of the intrinsic value (DCF, or residual income for lenders) in each scenario; the rest is the relative value (peer P/E for companies, the company's own 5-year median P/B for banks, NBFCs and insurers). |
 | `scenario_probabilities` | — | 0.2 / 0.6 / 0.2 | Bear / base / bull. Must sum to 1. |
 | `scenario_multiple_factors` | — | 0.8 / 1.0 / 1.15 | Applied to the peer-multiple value per scenario. |
 | `margin_of_safety` | — | 0.33 | Entry price = base value × (1 − MoS). |
@@ -24,6 +28,11 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 |---|---|
 | `research_brief` | The firm's deep-dive brief (editable in Settings; max 8,000 characters; empty = standard process only) |
 | `council_followup` | on — when the council finds the research incomplete, gaps go back to the desks and the decision is re-signed |
+| `council_recheck` | on — after a follow-up that changed memos, the council reviews the report once more |
+| `block_incomplete_reports` | on — a report the council still finds incomplete is published as a DRAFT and the call is not logged |
+| `reality_check_revision` | on — see `reality_check_threshold` |
+| `cio_valuation_challenge` | on — the CIO may dispute one valuation input; the analyst re-runs the valuation and the CIO signs again (the rating still follows the bands) |
+| `call_id_floor` | 0 — call IDs continue from this number (e.g. 24 → AC-025) when the local log is behind a shared sheet |
 
 ## LLMs
 
@@ -49,6 +58,10 @@ Precedence: defaults in `aladeen/config.py` < environment variables (and `.env`)
 | `fetch_documents` | Settings | on |
 | `document_mode` | `ALADEEN_DOCUMENT_MODE` | `focused` |
 | `max_annual_reports` / `max_concall_transcripts` | — | 5 / 4 |
+| `max_presentations` | — | 2 (investor presentations of the latest quarters; often the only document for the newest results) |
+| `filings_chars_per_document` | — | 30,000 in focused mode; the latest concall and presentation are read in full |
+| `max_announcements_read` / `announcement_chars` | — | 5 / 3,000 (newest exchange filings read in full) |
+| `web_results` / `web_text_chars` | — | 6 / 4,000 per Exa result |
 | `history_years` | — | 10 |
 | `news_lookback_days` | — | 90 |
 

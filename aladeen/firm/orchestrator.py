@@ -4,12 +4,14 @@
     → CIO sets the mandate and briefs each desk
     → research desks write memos in parallel
     → Compliance audits the memos; CIO reviews and sends weak memos back for revision
-    → Valuation Analyst sets assumptions; the engine values the company
-    → Bull and Bear Advocates debate; CIO rules and names the kill fact
+    → Valuation Analyst sets assumptions; the engine values the company; a target far from both the
+      price and the consensus goes back to the analyst once (reality check)
+    → Bull and Bear Advocates open on the business (valuation hidden), then rebut with it; CIO rules
     → Chief Risk Officer stress-tests the view
-    → CIO signs the decision
+    → CIO signs the decision, or challenges the valuation once and signs again
     → Compliance audits every number and enforces the rating bands
-    → Independent Council reviews the signed report (optional)
+    → Independent Council reviews the signed report (optional); its gaps go back to the desks, and
+      the council checks again; a report it still finds incomplete is published as a draft, unlogged
     → Publishing Editor typesets and files the report
 
 Every step is announced on an EventLog so the dashboard can show the office at work.
@@ -74,7 +76,10 @@ class ResearchRun:
         if v:
             texts.append(cx.valuation_md(v))
             extra = [v["target_price"], v["cmp"], v["entry_price_for_mos"], v["intrinsic_base"],
-                     *(x["value"] for x in v["scenarios"].values())]
+                     v.get("value_today") or 0.0, *(x["value"] for x in v["scenarios"].values()),
+                     *(x.get("value_today") or 0.0 for x in v["scenarios"].values())]
+            if v.get("implied_roe_at_cmp") is not None:
+                extra.append(v["implied_roe_at_cmp"] * 100)
         return audit_mod.known_set(*texts, extra=extra)
 
     @staticmethod
@@ -102,9 +107,10 @@ class ResearchRun:
         self.state.update(fp=fp, quant=q, company=fp.name)
         rec = q["reconciliation"]
         failed = [r for r in rec if r["status"] != "OK"]
+        caveats = data_caveats(fp, q)
+        self.state["data_caveats"] = caveats
         self.ev.log("data", f"Fact pack ready: {fp.name}. {len(rec) - len(failed)}/{len(rec)} reconciliation "
-                            f"checks passed; {len(fp.warnings)} data caveats.",
-                    "\n".join(f"{r['check']} ({r['period']})" for r in failed))
+                            f"checks passed; {len(caveats)} data caveats.", "\n".join(caveats))
         self.ev.emit("company", name=fp.name, ticker=fp.ticker, exchange=fp.exchange, logo=fp.company.get("logo"))
         self._done("data", "Fact pack delivered to the CIO")
         try:
@@ -183,7 +189,8 @@ class ResearchRun:
             self.ev.message("cio", r.desk, "Please revise: " + _short(r.notes, 200))
             self._work(r.desk, "Revising memo: " + _short(r.notes, 120))
             text, material = staff.write_memo(r.desk, self.runner, self.cfg, s["fp"], s["quant"],
-                                              s["mandate"], revision_notes=r.notes, previous=s["memos"][r.desk])
+                                              s["mandate"], revision_notes=r.notes, previous=s["memos"][r.desk],
+                                              peer_memos=dict(s["memos"]))
             self.ev.log(r.desk, "Revised memo submitted", _short(text, 900))
             self.ev.agent(r.desk, "waiting", "Revised memo with the CIO")
             return r, text, material
@@ -194,20 +201,19 @@ class ResearchRun:
                 s["memos"][r.desk] = text
                 s["materials"][r.desk] = material
 
-    def _valuation(self) -> None:
-        self.ev.phase("valuation")
+    def _run_valuation(self, challenge: str | None = None) -> dict:
+        """Analyst assumptions -> engine. With ``challenge``, the analyst revises its previous assumptions."""
         s = self.state
-        self.ev.message("cio", "valuation", "Value the company. Answer the key questions in your assumptions.")
-        self._work("valuation", "Setting growth, margin, reinvestment and scenario assumptions")
         try:
-            a = staff.valuation_analyst(self.runner, self.cfg, s["fp"], s["quant"], s["memos"], s["mandate"])
+            a = staff.valuation_analyst(self.runner, self.cfg, s["fp"], s["quant"], s["memos"], s["mandate"],
+                                        challenge=challenge, previous=s.get("assumptions"))
         except Exception as e:  # noqa: BLE001 - fall back to defaults, but say so
             msg = f"Valuation analyst failed ({type(e).__name__}: {e}); history-based default assumptions used."
             a = ValuationAssumptions(rationale=msg)
             s["errors"].append(msg)
             self.ev.log("valuation", msg)
         self.ev.message("valuation", "data", "Run the model with these assumptions.")
-        self._work("data", "Running DCF, sensitivity grid, peer multiples and scenarios")
+        self._work("data", "Running the valuation model, sensitivity grid, multiples and scenarios")
         try:
             res = value_company(s["quant"], self.cfg, a.to_engine())
         except ValueError as e:
@@ -221,25 +227,51 @@ class ResearchRun:
                                                     v["target_price"])
         s.update(assumptions=a.model_dump(), valuation=v)
         self._done("data", "Valuation computed")
-        self.ev.log("valuation", f"Probability-weighted value ₹{v['target_price']:,.2f} vs CMP ₹{v['cmp']:,.2f} "
+        self.ev.log("valuation", f"12-month target ₹{v['target_price']:,.2f} vs CMP ₹{v['cmp']:,.2f} "
                                  f"({v['upside'] * 100:+.1f}%); bands imply {v['band_rating']}.",
                     _short(a.rationale, 900))
+        return v
+
+    def _valuation(self) -> None:
+        self.ev.phase("valuation")
+        s = self.state
+        s["valuation_revisions"] = []
+        self.ev.message("cio", "valuation", "Value the company. Answer the key questions in your assumptions.")
+        self._work("valuation", "Setting growth, margin, reinvestment and scenario assumptions")
+        v = self._run_valuation()
+        rc = v.get("reality_check") or {}
+        if rc.get("flag") and self.cfg.get("reality_check_revision", True):
+            note = rc["message"]
+            self.ev.message("cio", "valuation", "Reality check: " + _short(note, 220))
+            self._work("valuation", "Re-examining the assumptions against the market price")
+            s["valuation_revisions"].append({"by": "reality_check", "note": note,
+                                             "before": v["target_price"]})
+            v = self._run_valuation(challenge=note + " Either show, with evidence, what the market is missing, "
+                                                     "or revise the assumptions.")
+            s["valuation_revisions"][-1]["after"] = v["target_price"]
         self._done("valuation", "Valuation delivered to the CIO")
-        s["debate_material"] = staff.debate_material(s["fp"], s["quant"], v, s["memos"],
-                                                     s["desk_review"].synthesis,
-                                                     calllog.prior_calls_md(s["prior_calls"]))
+        self._set_debate_material()
         self.ev.phase("valuation", "done")
+
+    def _set_debate_material(self) -> None:
+        s = self.state
+        prior = calllog.prior_calls_md(s["prior_calls"])
+        s["debate_material_open"] = staff.debate_material(s["fp"], s["quant"], None, s["memos"],
+                                                          s["desk_review"].synthesis, prior)
+        s["debate_material"] = staff.debate_material(s["fp"], s["quant"], s["valuation"], s["memos"],
+                                                     s["desk_review"].synthesis, prior)
 
     def _debate(self) -> None:
         self.ev.phase("debate")
         s = self.state
         s["debate"] = []
         self.ev.message("cio", "bull", "Make the case for owning it.")
-        self.ev.message("cio", "bear", "Make the case against it. Start with governance and cash flow.")
+        self.ev.message("cio", "bear", "Make the case against it. Lead with what most threatens value here.")
         for r in range(self.cfg["max_debate_rounds"] + 1):
+            material = s["debate_material_open"] if r == 0 else s["debate_material"]
             for side in ("bull", "bear"):
                 self._work(side, "Opening case" if r == 0 else "Rebuttal")
-                text = staff.debate_turn(side, self.runner, self.cfg, s["debate_material"], s["debate"], r)
+                text = staff.debate_turn(side, self.runner, self.cfg, material, s["debate"], r)
                 s["debate"].append({"side": side, "round": r, "text": text})
                 self.ev.log(side, ("Opening case" if r == 0 else "Rebuttal") + " delivered", _short(text, 900))
                 self.ev.agent(side, "waiting", "Listening to the other side")
@@ -276,6 +308,20 @@ class ResearchRun:
         self._work("cio", "Writing and signing the investment decision")
         final = staff.cio_decide(self.runner, self.cfg, s["debate_material"], s["debate_verdict"], s["risk_review"],
                                  self.audit_md(s["audit"]))
+        if final.valuation_challenge and self.cfg.get("cio_valuation_challenge", True):
+            # The CIO disputes the valuation: the analyst re-runs it once, then the CIO signs again.
+            before = s["valuation"]["target_price"]
+            self.ev.message("cio", "valuation", "I dispute the valuation: " + _short(final.valuation_challenge, 220))
+            self._work("valuation", "Re-running the valuation on the CIO's challenge")
+            s.setdefault("valuation_revisions", []).append({"by": "cio", "note": final.valuation_challenge,
+                                                            "before": before})
+            v = self._run_valuation(challenge="The CIO challenges the valuation: " + final.valuation_challenge)
+            s["valuation_revisions"][-1]["after"] = v["target_price"]
+            self._done("valuation", "Revised valuation delivered to the CIO")
+            self._set_debate_material()
+            self._work("cio", "Re-signing the decision on the revised valuation")
+            final = staff.cio_decide(self.runner, self.cfg, s["debate_material"], s["debate_verdict"],
+                                     s["risk_review"], self.audit_md(s["audit"]))
         s["final"] = final.model_dump()
         qual = f" ({final.qualifier})" if final.qualifier else ""
         self.ev.log("cio", f"Decision signed: {final.rating}{qual}, {final.position_size} position. {final.headline}")
@@ -356,8 +402,23 @@ class ResearchRun:
             s["final"] = final.model_dump()
             self.ev.log("cio", f"Decision re-signed after the council follow-up: {final.rating}. {final.headline}")
             self._compliance()  # bands and number audit again on the new decision
+            if self.cfg.get("council_recheck", True):
+                first = cv
+                self._council()
+                s["council"]["first_verdict"] = first
         self._done("cio", "Decision signed")
         self.ev.phase("followup", "done")
+
+    def _status(self) -> None:
+        """A report the council still finds incomplete is published as a draft and not logged as a call."""
+        s = self.state
+        cv = (s.get("council") or {}).get("verdict") or {}
+        incomplete = bool(cv) and not cv.get("report_complete", True)
+        s["report_status"] = "draft" if incomplete and self.cfg.get("block_incomplete_reports", True) else "final"
+        if s["report_status"] == "draft":
+            s["draft_reason"] = ("The independent council found gaps that could change the call: "
+                                 + "; ".join(cv.get("gaps_in_report") or ["see the council section"]))
+            self.ev.log("cio", "Report held as a DRAFT: " + _short(s["draft_reason"], 300))
 
     def _publish(self) -> None:
         from aladeen.report.render import log_call, save_outputs
@@ -368,7 +429,9 @@ class ResearchRun:
         s["_runner"] = self.runner
         paths = save_outputs(s, self.cfg, self.out_dir)
         s["paths"] = {k: str(p) for k, p in paths.items()}
-        if self.cfg.get("log_calls", True):
+        if self.cfg.get("log_calls", True) and s.get("report_status", "final") == "draft":
+            self.ev.log("editor", "Draft report: the call is not filed in the call log until the gaps are closed.")
+        elif self.cfg.get("log_calls", True):
             try:
                 row = log_call(s, self.cfg, paths["report"])
                 if row:
@@ -392,7 +455,7 @@ class ResearchRun:
                  self._decision, self._compliance]
         if self.cfg.get("run_council", True):
             steps += [self._council, self._followup]
-        steps.append(self._publish)
+        steps += [self._status, self._publish]
         try:
             self._preflight()
             for step in steps:
@@ -428,7 +491,7 @@ def report_summary_md(s: dict) -> str:
         f"## Governance score: {f['governance_score']}",
         "## Desk memos\n" + staff.memos_md(s.get("memos", {})),
         cx.reconciliation_md(s["quant"]),
-        cx.warnings_md(fp, v.get("warnings")),
+        cx.warnings_md(fp, [*s.get("data_caveats", []), *v.get("warnings", [])]),
     ]
     flagged = {k: x for k, x in s.get("audit", {}).items() if x}
     if flagged:
@@ -438,3 +501,12 @@ def report_summary_md(s: dict) -> str:
 
 def run_research(cfg: dict, ticker: str, as_of: date | str, **kw) -> dict:
     return ResearchRun(cfg, ticker, as_of, **kw).run()
+
+
+def data_caveats(fp: FactPack, q: dict) -> list[str]:
+    """Every known limit of the data: fact-pack warnings, failed reconciliations and engine notes."""
+    out = list(fp.warnings)
+    out += [f"Reconciliation mismatch: {r['check']} ({r['period']}): expected {r['expected']:,}, "
+            f"reported {r['actual']:,}" for r in q.get("reconciliation", []) if r["status"] != "OK"]
+    out += [n for n in q.get("market", {}).get("notes", []) if n not in out]
+    return out

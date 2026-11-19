@@ -202,7 +202,8 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
         docs = docs_mod.collect(http, sc_["documents"], cfg["max_annual_reports"],
                                 cfg["max_concall_transcripts"], cfg["document_mode"],
                                 cfg["document_char_budget"],
-                                fallback=lambda url: backups.document_text(url, cfg))
+                                fallback=lambda url: backups.document_text(url, cfg),
+                                max_presentations=cfg.get("max_presentations", 2))
         for d in docs:
             rec = d.as_dict()
             rec["text"] = d.text
@@ -211,4 +212,24 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
                 fp.warn(f"Could not read {d.title}: {d.error}")
             else:
                 fp.sources.append({"name": d.title, "url": d.url})
+    if sc_.get("documents"):
+        gap = docs_mod.latest_call_gap(sc_["documents"])
+        if gap:
+            fp.warn(gap)
+        anns = sc_["documents"].get("announcements", [])
+        if anns and cfg.get("max_announcements_read", 5):
+            progress("Exchange announcements: reading the newest filings")
+            read = docs_mod.read_announcements(http, anns, cfg.get("max_announcements_read", 5),
+                                               cfg.get("announcement_chars", 3000),
+                                               fallback=lambda url: backups.document_text(url, cfg))
+            if read < min(len(anns), cfg.get("max_announcements_read", 5)):
+                fp.warn(f"Only {read} of the newest {min(len(anns), cfg.get('max_announcements_read', 5))} "
+                        "exchange announcements could be read in full; the rest are titles only.")
+    splits = fp.yahoo.get("splits") or {}
+    recent = {d: r for d, r in splits.items() if (as_of - date.fromisoformat(d)).days <= 5 * 365}
+    if recent:
+        fp.warn("Corporate action: share split(s) " + ", ".join(f"{d} ({r:g}:1)" for d, r in recent.items())
+                + ". Per-share history (EPS, book value, prices) must be on the post-split basis.")
+    if not fp.yahoo.get("info", {}).get("targetMeanPrice") and not fp.web:
+        fp.warn("No broker consensus target in the sources.")
     return fp

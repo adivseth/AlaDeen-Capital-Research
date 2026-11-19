@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
 from email.utils import parsedate_to_datetime
@@ -31,11 +32,31 @@ def parse_rss(xml_text: str) -> list[dict]:
     return items
 
 
+_SUFFIX = re.compile(r"\s+(ltd\.?|limited|pvt\.?|private)$", re.I)
+
+
+def short_name(company: str) -> str:
+    """'Kotak Mahindra Bank Ltd' -> 'Kotak Mahindra Bank' (news rarely carries the legal suffix)."""
+    name = company.strip()
+    while _SUFFIX.search(name):
+        name = _SUFFIX.sub("", name).strip()
+    return name
+
+
+def queries(company: str, symbol: str) -> list[str]:
+    n = short_name(company)
+    return [f'"{n}"', f'"{n}" results OR quarter OR RBI OR rating', f'"{symbol}" share price']
+
+
 def company_news(http: Http, company: str, symbol: str, as_of: date, lookback_days: int = 90,
                  limit: int = 40) -> list[dict]:
-    q = f'"{company}" OR "{symbol}" share'
-    url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=en-IN&gl=IN&ceid=IN:en"
-    items = parse_rss(http.get(url))
+    items: list[dict] = []
+    for q in queries(company, symbol):
+        url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=en-IN&gl=IN&ceid=IN:en"
+        try:
+            items += parse_rss(http.get(url))
+        except Exception:  # noqa: BLE001 - one failed query should not lose the others
+            continue
     lo = as_of - timedelta(days=lookback_days)
     keep = []
     seen = set()
