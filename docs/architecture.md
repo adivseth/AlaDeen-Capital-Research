@@ -48,6 +48,10 @@ dashboard draws the office from them; finished runs replay from `events.json`.
 3. **Reconciliation is visible.** Accounting identities and cross-source checks are reported, never silently
    corrected.
 4. **Point-in-time prices.** Price history stops at the analysis date.
+5. **A failed research can be continued.** `firm/journal.py` wraps the AI runner and stores every answer in
+   `journal.jsonl` (keyed by agent, tier, prompts, schema and nth occurrence, not by model). The fact pack and prior
+   calls are frozen on the first attempt, so a retry builds identical prompts, replays finished answers and asks the
+   AI only for what is missing. Failed calls are never stored.
 
 ## Extending
 

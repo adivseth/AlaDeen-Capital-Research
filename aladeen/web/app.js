@@ -1,4 +1,4 @@
-/* AlaDeen Capital Research — dashboard */
+/* AlaDeen Capital Research — dashboard ("The Research Desk") */
 "use strict";
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -8,7 +8,14 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const inr = (v, d = 2) => (v == null || isNaN(v) ? "—" : "₹" + Number(v).toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const pct = (v, d = 1) => (v == null || isNaN(v) ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%");
 const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" }) : "—");
-const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+// Desk codes (the three letters on every docket) and the numerals on the floor plan.
+const CODES = { cio: "CIO", data: "QNT", fundamentals: "FIN", business: "SEC", governance: "GOV", filings: "FLG", news: "INT",
+  technical: "TEC", valuation: "VAL", bull: "BUL", bear: "BER", risk: "CRO", compliance: "CMP", council: "CNL", editor: "EDT" };
+const code = (id) => CODES[id] || String(id || "").slice(0, 3).toUpperCase();
+const ROOM_NO = { executive: "I", floor: "II", lab: "III", debate: "IV", risk: "V", council: "VI", publishing: "VII" };
+const STATE_WORD = { idle: "Idle", working: "Working", waiting: "Waiting", done: "Filed", error: "Stopped" };
 
 let ROSTER = null;
 let active = { runId: null, stop: true };
@@ -32,13 +39,14 @@ function toast(msg, ms = 2600) {
   t._h = setTimeout(() => t.classList.remove("on"), ms);
 }
 
-function ratingPill(r, q) {
+// A rating is a rubber stamp; a status is a lamp and a word.
+function ratingPill(r, q, size = "") {
   if (!r) return "";
-  return `<span class="pill ${esc(r)}">${esc(r)}${q ? " · " + esc(q) : ""}</span>`;
+  return `<span class="stamp ${esc(r)} ${size}">${esc(r)}${q ? " · " + esc(q) : ""}</span>`;
 }
 function statusPill(s, demo) {
-  const label = { running: "Researching", done: "Published", error: "Failed", queued: "Queued" }[s] || s;
-  return `<span class="pill ${esc(s)}">${s === "running" ? '<i class="spin"></i>' : ""}${esc(label)}</span>${demo ? ' <span class="pill demo">Demo</span>' : ""}`;
+  const label = { running: "Researching", done: "Published", error: "Stopped", queued: "Queued" }[s] || s;
+  return `<span class="status ${esc(s)}"><i class="lamp"></i>${esc(label)}</span>${demo ? '<span class="tag">Demo</span>' : ""}`;
 }
 
 /* ------------------------------------------------------------------ router */
@@ -46,10 +54,10 @@ async function route() {
   active.stop = true;
   const h = location.hash.replace(/^#/, "") || "/";
   const [, page, id] = h.split("/");
-  $$(".sidebar nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === (page || "home") || (page === "run" && a.dataset.nav === "office")));
+  $$(".mainnav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === (page || "home") || (page === "run" && a.dataset.nav === "office")));
   try {
     if (!ROSTER) ROSTER = await api("/api/roster");
-    refreshModelChip();
+    refreshMasthead();
     if (!page) return await renderHome();
     if (page === "run" && id) return await renderRun(id);
     if (page === "office") {
@@ -63,59 +71,91 @@ async function route() {
     if (page === "settings") return await renderSettings();
     await renderHome();
   } catch (e) {
-    view.innerHTML = `<div class="card"><h3>Something went wrong</h3><p class="muted">${esc(e.message)}</p></div>`;
+    view.innerHTML = `<div class="empty"><div class="e">Something went wrong</div>${esc(e.message)}</div>`;
   }
 }
 window.addEventListener("hashchange", route);
 
-async function refreshModelChip() {
+// The dateline, the engine line, and the ticker tape of published calls.
+async function refreshMasthead() {
+  $("#dateline").textContent = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
   try {
     const s = await api("/api/settings");
     const p = s.providers.find((x) => x.id === s.values.llm_provider);
-    $("#model-chip").innerHTML = `<b>${esc(p ? p.label : s.values.llm_provider)}</b><br><span class="tiny">CIO: ${esc(s.values.deep_think_llm)}<br>Analysts: ${esc(s.values.quick_think_llm)}</span>`;
+    $("#model-chip").textContent = `Engine · ${p ? p.label : s.values.llm_provider} · CIO ${s.values.deep_think_llm} · Desks ${s.values.quick_think_llm}`;
+  } catch (_) { /* ignore */ }
+  try {
+    const runs = await api("/api/runs");
+    const items = runs.filter((r) => r.status === "done" && !r.demo && r.rating).slice(0, 14);
+    const one = items.length
+      ? items.map((r) => `<span class="ti"><b>${esc(r.ticker)}</b><span class="rt ${esc(r.rating)}">${r.rating === "BUY" ? "▲" : r.rating === "SELL" ? "▼" : "■"} ${esc(r.rating)}</span><span>${inr(r.target_price, 0)}</span><span>${pct(r.upside)}</span></span>`).join("")
+      : `<span class="ti">No calls on the tape yet</span><span class="ti">New research begins at the desk</span>`;
+    const half = one.repeat(Math.max(1, Math.ceil(8 / Math.max(items.length, 2))));
+    $("#tape").innerHTML = half + half;
   } catch (_) { /* ignore */ }
 }
 
-/* ------------------------------------------------------------------ home */
+/* ------------------------------------------------------------------ home: the desk */
 async function renderHome() {
   const runs = await api("/api/runs");
-  const done = runs.filter((r) => r.status === "done" && !r.demo);
+  const real = runs.filter((r) => !r.demo);
+  const done = real.filter((r) => r.status === "done");
+  const count = (x) => done.filter((r) => r.rating === x).length;
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const issued = now.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
   view.innerHTML = `
-  <div class="homebanner"><img src="/static/banner.jpg" alt="AlaDeen Capital Research"></div>
-  <div class="hero">
-    <h1>What should the firm research today?</h1>
-    <p>Name an NSE or BSE company. The CIO will brief the research desks, review their work, run the bull-vs-bear debate and the risk office, and sign an institutional-grade report. You can watch every step in the live office.</p>
-    <form id="newform">
-      <input class="big" id="ticker" placeholder="Ticker or BSE code — e.g. TCS, RELIANCE, 532540" autocomplete="off" autofocus>
-      <input id="asof" type="date" value="${today}" max="${today}" title="Analysis date">
-      <button class="btn primary" type="submit">Start research →</button>
-      <button class="btn" type="button" id="demo">Try the demo</button>
-    </form>
+  <div class="deskgrid">
+    <section class="slip">
+      <div class="slip-head"><span>Mandate slip № ${String(real.length + 1).padStart(4, "0")}</span><span>Issued ${esc(issued)}</span></div>
+      <div class="slip-body">
+        <h2>What shall the firm <em>look into</em> today?</h2>
+        <p>Name an NSE or BSE company. The CIO briefs the research desks, sends weak memos back, stages the bull-versus-bear debate, calls in the risk office and signs the report. Every step is visible on the floor.</p>
+        <form id="newform">
+          <div class="slipfields">
+            <div><label class="f" for="ticker">Company · ticker or BSE code</label><input class="big" id="ticker" placeholder="TCS, RELIANCE, 532540" autocomplete="off" autofocus></div>
+            <div><label class="f" for="asof">As of</label><input id="asof" type="date" value="${today}" max="${today}"></div>
+          </div>
+          <div class="slipactions"><button class="btn primary" type="submit">Issue the mandate →</button><button class="btn" type="button" id="demo">Run the demo</button></div>
+        </form>
+      </div>
+    </section>
+    <aside class="book">
+      <div class="book-head"><span>The book</span><span>${real.length} on file</span></div>
+      <div class="leader"><span>Published</span><i></i><b>${done.length}</b></div>
+      <div class="leader BUY"><span>Buy</span><i></i><b>${count("BUY")}</b></div>
+      <div class="leader HOLD"><span>Hold</span><i></i><b>${count("HOLD")}</b></div>
+      <div class="leader SELL"><span>Sell</span><i></i><b>${count("SELL")}</b></div>
+      <div class="leader"><span>Stopped</span><i></i><b>${real.filter((r) => r.status === "error").length}</b></div>
+    </aside>
   </div>
-  <div class="grid g4" style="margin:18px 0">
-    <div class="card stat"><div class="l">Researches</div><div class="n">${runs.filter((r) => !r.demo).length}</div></div>
-    <div class="card stat"><div class="l">BUY calls</div><div class="n" style="color:var(--green)">${done.filter((r) => r.rating === "BUY").length}</div></div>
-    <div class="card stat"><div class="l">HOLD calls</div><div class="n" style="color:var(--amber)">${done.filter((r) => r.rating === "HOLD").length}</div></div>
-    <div class="card stat"><div class="l">SELL calls</div><div class="n" style="color:var(--red)">${done.filter((r) => r.rating === "SELL").length}</div></div>
-  </div>
-  <div class="page-head"><div><h1 style="font-size:18px">Recent research</h1></div><a href="#/history" class="btn ghost">Open archive →</a></div>
-  ${runs.length ? `<div class="rcards">${runs.slice(0, 8).map(rcard).join("")}</div>` :
-    `<div class="card empty"><div class="e">🗂️</div>No research yet. Start one above, or try the demo to see the office at work.</div>`}`;
+  <div class="sect-head"><div><div class="kicker">Latest filings</div><h2>Recent research</h2></div><a href="#/history" class="btn ghost sm">Open the archive →</a></div>
+  ${runs.length ? runs.slice(0, 8).map(lrow).join("") :
+    `<div class="empty"><div class="e">Nothing filed</div>No research yet. Issue a mandate above, or run the demo to watch the floor at work.</div>`}`;
   $("#newform").onsubmit = (e) => { e.preventDefault(); startResearch($("#ticker").value, $("#asof").value); };
   $("#demo").onclick = () => startResearch("DEMO", null, true);
-  $$(".rcard").forEach((c) => (c.onclick = () => (location.hash = "#/run/" + c.dataset.id)));
+  bindRows();
 }
 
-function rcard(r) {
-  return `<div class="rcard" data-id="${esc(r.id)}">
-    <div class="row">${statusPill(r.status, r.demo)}${ratingPill(r.rating, r.qualifier)}</div>
-    <div class="t">${esc(r.company || r.ticker)}</div>
-    <div class="muted small">${esc(r.ticker)} · as of ${esc(r.as_of)}</div>
-    ${r.status === "done" ? `<div class="row small" style="margin-top:10px"><span>Target <b>${inr(r.target_price, 0)}</b></span><span>${pct(r.upside)}</span></div>` : ""}
-    ${r.status === "error" ? `<div class="small" style="color:var(--red);margin-top:8px">${esc((r.error || "").slice(0, 90))}</div>` : ""}
+// One filing in the ledger. A stopped research carries its reason and a Try again button.
+function lrow(r) {
+  const ok = r.status === "done";
+  return `<div class="lrow" data-id="${esc(r.id)}" tabindex="0" role="link">
+    <div class="tk">${esc(r.ticker)}</div>
+    <div class="co"><b>${esc(r.company || r.ticker)}</b><span>as of ${esc(r.as_of)}${r.demo ? " · demo" : ""}</span>${r.status === "error" ? `<em class="why">${esc((r.error || "").slice(0, 110))}</em>` : ""}</div>
+    <div>${ok ? ratingPill(r.rating, r.qualifier) : statusPill(r.status, r.demo)}</div>
+    <div class="nm">${ok ? inr(r.target_price, 0) : "—"}</div>
+    <div class="nm up ${r.upside >= 0 ? "pos" : "neg"}">${ok ? pct(r.upside) : ""}</div>
+    <div class="go">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button>` : ""}</div>
   </div>`;
+}
+
+function bindRows() {
+  $$(".lrow").forEach((row) => {
+    row.onclick = (ev) => { if (!ev.target.closest("[data-retry]")) location.hash = "#/run/" + row.dataset.id; };
+    row.onkeydown = (ev) => { if (ev.key === "Enter" && !ev.target.closest("[data-retry]")) location.hash = "#/run/" + row.dataset.id; };
+  });
+  $$("[data-retry]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); retryResearch(b.dataset.retry, b); }));
 }
 
 async function startResearch(ticker, asOf, demo = false) {
@@ -128,74 +168,74 @@ async function startResearch(ticker, asOf, demo = false) {
 }
 
 function renderEmptyOffice() {
-  view.innerHTML = `<div class="page-head"><div><h1>Live office</h1><p>Start a research to see the team at work.</p></div></div>
-  ${officeHTML()}<div class="card empty" style="margin-top:16px"><div class="e">🏢</div>The office is quiet. <a href="#/">Start a research</a> or try the demo.</div>`;
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ II · The floor</div><h1>The floor is quiet.</h1><p>Issue a mandate and the desks will light up as the research goes.</p></div></div>
+  ${officeHTML()}<div class="empty"><div class="e">No research running</div><a href="#/">Go to the desk</a> and start one, or run the demo.</div>`;
 }
 
-/* ------------------------------------------------------------------ office */
+/* ------------------------------------------------------------------ the floor board */
 function officeHTML() {
-  const rooms = ROSTER.rooms.map((room) => {
+  const rooms = ROSTER.rooms.map((room, i) => {
     const desks = ROSTER.agents.filter((a) => a.room === room.id).map((a) => `
-      <div class="desk" id="desk-${a.id}" title="${esc(a.role)}" style="color:${a.color}">
-        <span class="st"></span>
-        <div class="av" style="background:${a.color}1a">${a.icon}</div>
-        <div class="nm" style="color:var(--ink)">${esc(a.short)}</div>
+      <div class="desk ${esc(a.tier)}" id="desk-${a.id}" title="${esc(a.role)}">
+        <div class="dk-top"><i class="st"></i><span class="cd">${code(a.id)}</span><span class="sw">${STATE_WORD.idle}</span></div>
+        <div class="nm">${esc(a.short)}</div>
         <div class="ti">${esc(a.title)}</div>
+        <div class="task">Idle</div>
         <div class="screen"><i></i></div>
-        <div class="task" style="color:var(--ink2)">Idle</div>
       </div>`).join("");
-    return `<div class="room ${room.id}"><div class="rlabel">${esc(room.title)}</div><div class="desks">${desks}</div></div>`;
+    return `<section class="room ${room.id}"><div class="rlabel">${ROOM_NO[room.id] || i + 1} · ${esc(room.title)}</div><div class="desks">${desks}</div></section>`;
   }).join("");
   return `<div class="office" id="office">${rooms}</div>`;
 }
 
 function phasesHTML() {
-  return `<div class="phases" id="phases">${ROSTER.phases.map((p, i) => `<div class="phase" id="ph-${p.id}"><span class="dot"></span>${i + 1}. ${esc(p.title)}</div>`).join("")}</div>`;
+  return `<div class="rail" id="phases">${ROSTER.phases.map((p, i) => `<div class="phase" id="ph-${p.id}"><span class="n">${String(i + 1).padStart(2, "0")}</span>${esc(p.title)}</div>`).join("")}</div>`;
 }
 
-function agentMeta(id) { return ROSTER.agents.find((a) => a.id === id) || { icon: "•", title: id, short: id, color: "#64748b" }; }
+function agentMeta(id) { return ROSTER.agents.find((a) => a.id === id) || { title: id, short: id }; }
 
 function setDesk(id, status, task) {
   const d = $("#desk-" + id);
   if (!d) return;
   d.classList.remove("working", "waiting", "done", "error", "idle");
   d.classList.add(status);
-  const label = task || { done: "Done", waiting: "Waiting", working: "Working" }[status] || "";
-  $(".task", d).innerHTML = esc(label) + (status === "working" ? '<span class="typing"><i></i><i></i><i></i></span>' : "");
+  $(".sw", d).textContent = STATE_WORD[status] || status;
+  const label = task || { done: "Filed", waiting: "Waiting", working: "Working" }[status] || "";
+  $(".task", d).innerHTML = esc(label) + (status === "working" ? '<span class="cursor"></span>' : "");
 }
 
-function flyEnvelope(from, to) {
+// A memo between desks travels as a capsule in a pneumatic tube.
+function flyCapsule(from, to) {
   const office = $("#office");
   const a = $("#desk-" + from), b = $("#desk-" + to);
   if (!office || !a || !b) return;
   const ob = office.getBoundingClientRect(), ab = a.getBoundingClientRect(), bb = b.getBoundingClientRect();
-  const env = document.createElement("div");
-  env.className = "envelope";
-  env.textContent = "✉️";
-  env.style.left = ab.left - ob.left + ab.width / 2 - 10 + "px";
-  env.style.top = ab.top - ob.top + 18 + "px";
-  office.appendChild(env);
+  const cap = document.createElement("div");
+  cap.className = "capsule";
+  cap.style.left = ab.left - ob.left + ab.width / 2 - 16 + "px";
+  cap.style.top = ab.top - ob.top + 20 + "px";
+  office.appendChild(cap);
   requestAnimationFrame(() => {
-    env.style.transform = `translate(${bb.left - ab.left}px, ${bb.top - ab.top}px)`;
+    cap.style.transform = `translate(${bb.left - ab.left}px, ${bb.top - ab.top}px)`;
   });
-  setTimeout(() => { env.style.opacity = "0"; }, 1100);
-  setTimeout(() => env.remove(), 1500);
+  setTimeout(() => { cap.style.opacity = "0"; }, 1100);
+  setTimeout(() => cap.remove(), 1500);
 }
 
+// The wire: a telegraph tape of what the desks are saying.
 function feedItem(e) {
-  const m = agentMeta(e.agent);
+  const tm = `<div class="tm">${clock(e.ts)}</div>`;
   if (e.type === "message") {
-    const t = agentMeta(e.to);
-    return `<li class="msg"><div class="ic">${m.icon}</div><div><div class="who">${esc(m.short)} <span class="to">→ ${esc(t.title)}</span></div><div class="tx">${esc(e.text)}</div><div class="tm">${clock(e.ts)}</div></div></li>`;
+    return `<li class="msg">${tm}<div><div class="who">${code(e.agent)} <span class="to">→ ${code(e.to)}</span></div><div class="tx">${esc(e.text)}</div></div></li>`;
   }
   if (e.type === "log") {
-    return `<li><div class="ic">${m.icon}</div><div><div class="who">${esc(m.title)}</div><div class="tx">${esc(e.text)}</div>${e.detail ? `<details><summary>Show detail</summary><div>${esc(e.detail)}</div></details>` : ""}<div class="tm">${clock(e.ts)}</div></div></li>`;
+    return `<li>${tm}<div><div class="who">${code(e.agent)}</div><div class="tx">${esc(e.text)}</div>${e.detail ? `<details><summary>detail</summary><div>${esc(e.detail)}</div></details>` : ""}</div></li>`;
   }
   if (e.type === "error") {
-    return `<li class="err"><div class="ic">⚠️</div><div><div class="who">Research stopped</div><div class="tx">${esc(e.text)}</div><div class="tm">${clock(e.ts)}</div></div></li>`;
+    return `<li class="err">${tm}<div><div class="who">Stopped</div><div class="tx">${esc(e.text)}</div></div></li>`;
   }
   if (e.type === "done") {
-    return `<li><div class="ic">🏁</div><div><div class="who">Report published</div><div class="tx">${esc(e.rating)}${e.qualifier ? " (" + esc(e.qualifier) + ")" : ""} · target ${inr(e.target_price)} · ${pct(e.upside)} · ${esc(e.seconds)}s · ${esc(e.llm_calls)} AI calls</div><div class="tm">${clock(e.ts)}</div></div></li>`;
+    return `<li class="fin">${tm}<div><div class="who">Published</div><div class="tx">${esc(e.rating)}${e.qualifier ? " (" + esc(e.qualifier) + ")" : ""} · target ${inr(e.target_price)} · ${pct(e.upside)} · ${esc(e.seconds)}s · ${esc(e.llm_calls)} AI calls${e.reused_calls ? ` · ${esc(e.reused_calls)} answers reused from the earlier attempt` : ""}</div></div></li>`;
   }
   return "";
 }
@@ -206,20 +246,20 @@ async function renderRun(id) {
   active = { runId: id, stop: false };
   view.innerHTML = `
   <div class="runhead">
-    <div class="logo" id="rlogo">🏢</div>
-    <div><h1 id="rname">${esc(rec.company || rec.ticker)}</h1><div class="meta"><span id="rticker">${esc(rec.ticker)}</span> · as of ${esc(rec.as_of)} · started ${when(rec.created_at)}</div></div>
-    <div class="right"><span id="rstatus">${statusPill(rec.status, rec.demo)}</span><span class="muted small" id="elapsed"></span></div>
+    <div class="logo" id="rlogo">₹</div>
+    <div><div class="kicker">Research · ${esc(rec.id)}</div><h1 id="rname">${esc(rec.company || rec.ticker)}</h1><div class="meta"><span id="rticker">${esc(rec.ticker)}</span> · as of ${esc(rec.as_of)} · started ${when(rec.created_at)}</div></div>
+    <div class="right"><span id="rstatus">${statusPill(rec.status, rec.demo)}</span><span id="elapsed"></span></div>
   </div>
   <div id="banner"></div>
   <div class="tabs" id="tabs">
-    <button data-tab="office" class="on">🏢 Live office</button>
-    <button data-tab="report">📄 Report</button>
-    <button data-tab="file">🗒️ Research file</button>
-    <button data-tab="downloads">⬇️ Downloads</button>
+    <button data-tab="office" class="on">Floor board</button>
+    <button data-tab="report">Report</button>
+    <button data-tab="file">Working papers</button>
+    <button data-tab="downloads">Exhibits</button>
   </div>
   <div id="tab-office">${phasesHTML()}
     <div class="officewrap">${officeHTML()}
-      <div class="card feed"><h3><span>Activity</span><span class="muted small" id="fcount"></span></h3><ul id="feed"></ul></div>
+      <div class="wire"><h3><span>The wire</span><span id="fcount"></span></h3><ul id="feed"></ul></div>
     </div>
   </div>
   <div id="tab-report" hidden></div>
@@ -227,7 +267,7 @@ async function renderRun(id) {
   <div id="tab-downloads" hidden></div>`;
   $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab, rec)));
   if (rec.status === "done") showBanner(rec);
-  if (rec.status === "error") showError(rec.error);
+  if (rec.status === "error") showError(rec.error, id);
   followEvents(id, rec);
 }
 
@@ -238,24 +278,23 @@ function showTab(tab, rec) {
   if (tab === "report") {
     $("#tab-report").innerHTML = rec.status === "done" || $("#banner").dataset.done
       ? `<iframe class="reportframe" src="/api/runs/${id}/report"></iframe>`
-      : `<div class="card empty"><div class="e">✍️</div>The report will appear here when the CIO signs off.</div>`;
+      : `<div class="empty"><div class="e">Not yet filed</div>The report appears here when the CIO signs off.</div>`;
   }
   if (tab === "file") loadTranscript(id);
   if (tab === "downloads") {
-    $("#tab-downloads").innerHTML = `<div class="grid g3">
-      ${dl("📄", "Report (HTML)", "Self-contained web page with all charts", `/api/runs/${id}/report?download=1`)}
-      ${dl("🖨️", "Report (PDF)", "Opens the print dialog — choose “Save as PDF”", `/api/runs/${id}/report?print=1`, true)}
-      ${dl("🗒️", "Research file (Markdown)", "CIO mandate, memos, debate, decisions", `/api/runs/${id}/file/transcript.md`)}
-      ${dl("🧾", "Research data (JSON)", "Every agent output and the valuation", `/api/runs/${id}/file/research.json`)}
-      ${dl("🗄️", "Fact pack (JSON)", "All data the team worked from", `/api/runs/${id}/file/factpack.json`)}
-      ${dl("📜", "Event log (JSON)", "Timeline of the office", `/api/runs/${id}/file/events.json`)}
+    $("#tab-downloads").innerHTML = `<div class="exhibits">
+      ${exhibit("A", "Report (HTML)", "Self-contained page with every chart", `/api/runs/${id}/report?download=1`)}
+      ${exhibit("B", "Report (PDF)", "Opens the print dialog; choose “Save as PDF”", `/api/runs/${id}/report?print=1`, true)}
+      ${exhibit("C", "Working papers", "CIO mandate, memos, debate, decisions (Markdown)", `/api/runs/${id}/file/transcript.md`)}
+      ${exhibit("D", "Research data", "Every agent output and the valuation (JSON)", `/api/runs/${id}/file/research.json`)}
+      ${exhibit("E", "Fact pack", "All the data the team worked from (JSON)", `/api/runs/${id}/file/factpack.json`)}
+      ${exhibit("F", "Event log", "Timeline of the floor (JSON)", `/api/runs/${id}/file/events.json`)}
     </div>`;
   }
 }
 
-function dl(icon, title, sub, href, newTab = false) {
-  return `<a class="card" href="${href}" ${newTab ? 'target="_blank" rel="noopener"' : ""} style="display:flex;gap:14px;align-items:center;color:inherit">
-    <div style="font-size:28px">${icon}</div><div><b>${title}</b><div class="muted small">${sub}</div></div></a>`;
+function exhibit(letter, title, sub, href, newTab = false) {
+  return `<a class="exhibit" href="${href}" ${newTab ? 'target="_blank" rel="noopener"' : ""}><div class="ex">${letter}</div><div><b>${title}</b><span>${sub}</span></div></a>`;
 }
 
 async function loadTranscript(id) {
@@ -264,32 +303,51 @@ async function loadTranscript(id) {
     const md = await api(`/api/runs/${id}/transcript`);
     box.innerHTML = `<div class="md">${renderMarkdown(md)}</div>`;
   } catch (_) {
-    box.innerHTML = `<div class="card empty"><div class="e">🗒️</div>The research file is written when the report is published.</div>`;
+    box.innerHTML = `<div class="empty"><div class="e">Not yet filed</div>The working papers are written when the report is published.</div>`;
   }
 }
 
+// The verdict: the rubber stamp and the figures that matter.
 function showBanner(rec) {
   const b = $("#banner");
   const id = encodeURIComponent(rec.id);
   b.dataset.done = "1";
-  b.innerHTML = `<div class="banner">
-    <div><div class="k">Rating</div><div class="big">${ratingPill(rec.rating, rec.qualifier)}</div></div>
-    <div><div class="k">Target price</div><div class="big">${inr(rec.target_price)}</div></div>
-    <div><div class="k">CMP</div><div class="big">${inr(rec.cmp)}</div></div>
-    <div><div class="k">Upside</div><div class="big" style="color:${rec.upside >= 0 ? "var(--green)" : "var(--red)"}">${pct(rec.upside)}</div></div>
-    ${rec.council_verdict ? `<div><div class="k">Council</div><div class="big" style="font-size:16px">${esc(rec.council_verdict)}</div></div>` : ""}
-    <div class="actions">
-      <button class="btn primary" id="viewrep">View report</button>
+  b.innerHTML = `<div class="verdict">
+    <div><div class="vk">Rating</div>${ratingPill(rec.rating, rec.qualifier, "lg")}</div>
+    <div><div class="vk">Target price</div><div class="vv">${inr(rec.target_price)}</div></div>
+    <div><div class="vk">CMP</div><div class="vv">${inr(rec.cmp)}</div></div>
+    <div><div class="vk">Upside</div><div class="vv" style="color:${rec.upside >= 0 ? "var(--green)" : "var(--oxblood)"}">${pct(rec.upside)}</div></div>
+    <div><div class="vk">Council</div><div class="vv sm">${esc(rec.council_verdict || "—")}</div></div>
+    <div class="acts">
+      <button class="btn primary" id="viewrep">Read the report</button>
       <a class="btn" href="/api/runs/${id}/report?print=1" target="_blank" rel="noopener">PDF</a>
       <a class="btn" href="/api/runs/${id}/report?download=1">HTML</a>
     </div></div>
-    ${rec.headline ? `<p class="muted" style="margin:-6px 0 14px">${esc(rec.headline)}</p>` : ""}`;
+    ${rec.headline ? `<p class="headline">${esc(rec.headline)}</p>` : ""}`;
   $("#viewrep").onclick = () => showTab("report", { ...rec, status: "done" });
 }
 
-function showError(msg) {
-  $("#banner").innerHTML = `<div class="banner err"><div><div class="k">Research stopped</div><div>${esc(msg || "Unknown error")}</div></div>
-    <div class="actions"><a class="btn" href="#/settings">Check settings</a></div></div>`;
+function showError(msg, id = active.runId) {
+  $("#banner").innerHTML = `<div class="verdict err">
+    <div><div class="vk">Status</div><span class="stamp lg ERR">Stopped</span></div>
+    <div><div class="vk">What happened</div><div class="msg">${esc(msg || "Unknown error")}</div>
+      <div class="again">Try again continues this same research. Work already finished is kept, so only what is left is run.</div></div>
+    <div class="acts"><button class="btn primary" id="retry">↻ Try again</button><a class="btn" href="#/settings">Check settings</a></div></div>`;
+  $("#retry").onclick = (ev) => retryResearch(id, ev.currentTarget);
+}
+
+// Continue a failed research under the same id, then show it live again.
+async function retryResearch(id, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api("/api/runs/" + encodeURIComponent(id) + "/retry", { method: "POST" });
+    toast("Continuing the research…");
+    if (location.hash === "#/run/" + id) await renderRun(id);
+    else location.hash = "#/run/" + id;
+  } catch (e) {
+    if (btn) btn.disabled = false;
+    toast(e.message, 4000);
+  }
 }
 
 async function followEvents(id, rec) {
@@ -310,7 +368,7 @@ async function followEvents(id, rec) {
       apply(e, live && !res.closed);
       if (["message", "log", "error", "done"].includes(e.type)) {
         const f = $("#feed");
-        if (f) { f.insertAdjacentHTML("afterbegin", feedItem(e)); count++; $("#fcount").textContent = count + " updates"; }
+        if (f) { f.insertAdjacentHTML("afterbegin", feedItem(e)); count++; $("#fcount").textContent = count + " entries"; }
       }
     }
     if (res.closed) {
@@ -322,8 +380,8 @@ async function followEvents(id, rec) {
       if (active.runId !== id) return;
       $("#rstatus").innerHTML = statusPill(fresh.status, fresh.demo);
       if (fresh.seconds) $("#elapsed").textContent = fresh.seconds + "s";
-      if (fresh.status === "done" && !$("#banner").dataset.done) { showBanner(fresh); if (live) { toast("Report published"); showTab("report", fresh); } }
-      if (fresh.status === "error") showError(fresh.error);
+      if (fresh.status === "done" && !$("#banner").dataset.done) { showBanner(fresh); refreshMasthead(); if (live) { toast("Report published"); showTab("report", fresh); } }
+      if (fresh.status === "error") showError(fresh.error, id);
       break;
     }
   }
@@ -337,15 +395,15 @@ function apply(e, animate) {
   } else if (e.type === "agent") {
     setDesk(e.agent, e.status, e.task);
   } else if (e.type === "message") {
-    if (animate) flyEnvelope(e.agent, e.to);
+    if (animate) flyCapsule(e.agent, e.to);
     const t = $("#desk-" + e.to);
-    if (t && !t.classList.contains("working")) setDesk(e.to, "waiting", "📩 " + e.text);
+    if (t && !t.classList.contains("working")) setDesk(e.to, "waiting", "Memo: " + e.text);
   } else if (e.type === "company") {
     if (e.name) $("#rname").textContent = e.name;
     if (e.logo && /^(data:image\/|https?:\/\/)/.test(e.logo)) {
       const img = document.createElement("img");
       img.src = e.logo; img.alt = "";
-      img.onerror = () => { $("#rlogo").textContent = "🏢"; };
+      img.onerror = () => { $("#rlogo").textContent = "₹"; };
       $("#rlogo").replaceChildren(img);
     }
     if (e.ticker) $("#rticker").textContent = (e.exchange ? e.exchange + ": " : "") + e.ticker;
@@ -358,22 +416,23 @@ function apply(e, animate) {
 /* ------------------------------------------------------------------ archive */
 async function renderHistory() {
   const runs = await api("/api/runs");
-  view.innerHTML = `<div class="page-head"><div><h1>Research archive</h1><p>Every research your firm has run on this computer.</p></div>
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ III · The archive</div><h1>Every research on file.</h1><p>Everything your firm has run on this computer. Open one to read the report or watch the floor again.</p></div>
     <div style="display:flex;gap:10px"><input id="q" placeholder="Search company or ticker" style="width:240px">
     <select id="rf" style="width:140px"><option value="">All ratings</option><option>BUY</option><option>HOLD</option><option>SELL</option></select></div></div>
-    <div class="card" style="padding:6px 8px"><table class="t"><thead><tr><th>Company</th><th>As of</th><th>Status</th><th>Rating</th><th class="num">Target</th><th class="num">CMP</th><th class="num">Upside</th><th>Council</th><th>Run on</th><th></th></tr></thead><tbody id="rows"></tbody></table>
-    <div id="none" class="empty" hidden><div class="e">🗂️</div>Nothing here yet.</div></div>`;
+    <div class="sheet"><table class="t"><thead><tr><th>Company</th><th>As of</th><th>Status</th><th>Rating</th><th class="num">Target</th><th class="num">CMP</th><th class="num">Upside</th><th>Council</th><th>Run on</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+    <div id="none" class="empty" hidden><div class="e">Nothing here</div>No research matches.</div></div>`;
   const draw = () => {
     const q = $("#q").value.toLowerCase(), rf = $("#rf").value;
     const list = runs.filter((r) => (!q || ((r.company || "") + r.ticker).toLowerCase().includes(q)) && (!rf || r.rating === rf));
     $("#none").hidden = list.length > 0;
     $("#rows").innerHTML = list.map((r) => `<tr data-id="${esc(r.id)}" style="cursor:pointer">
-      <td><b>${esc(r.company || r.ticker)}</b><div class="muted small">${esc(r.ticker)}</div></td><td>${esc(r.as_of)}</td>
+      <td><b style="font:600 17px var(--serif)">${esc(r.company || r.ticker)}</b><div class="muted small" style="font-family:var(--mono)">${esc(r.ticker)}</div></td><td style="font-family:var(--mono)">${esc(r.as_of)}</td>
       <td>${statusPill(r.status, r.demo)}</td><td>${ratingPill(r.rating, r.qualifier)}</td>
       <td class="num">${inr(r.target_price, 0)}</td><td class="num">${inr(r.cmp, 0)}</td><td class="num">${r.status === "done" ? pct(r.upside) : "—"}</td>
       <td>${esc(r.council_verdict || "—")}</td><td class="small muted">${when(r.created_at)}</td>
-      <td><button class="btn ghost danger" data-del="${esc(r.id)}" title="Delete">🗑</button></td></tr>`).join("");
-    $$("#rows tr").forEach((tr) => (tr.onclick = (ev) => { if (!ev.target.closest("[data-del]")) location.hash = "#/run/" + tr.dataset.id; }));
+      <td style="white-space:nowrap">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button> ` : ""}<button class="btn ghost danger sm" data-del="${esc(r.id)}" title="Delete this research">Delete</button></td></tr>`).join("");
+    $$("#rows tr").forEach((tr) => (tr.onclick = (ev) => { if (!ev.target.closest("[data-del],[data-retry]")) location.hash = "#/run/" + tr.dataset.id; }));
+    $$("[data-retry]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); retryResearch(b.dataset.retry, b); }));
     $$("[data-del]").forEach((b) => (b.onclick = async (ev) => {
       ev.stopPropagation();
       if (!confirm("Delete this research and its files?")) return;
@@ -386,27 +445,27 @@ async function renderHistory() {
   $("#q").oninput = draw; $("#rf").onchange = draw; draw();
 }
 
-/* ------------------------------------------------------------------ call log */
+/* ------------------------------------------------------------------ call ledger */
 async function renderCalls() {
   const data = await api("/api/calls");
   const s = data.summary || {};
-  view.innerHTML = `<div class="page-head"><div><h1>Call log</h1><p>Every published rating, scored against the Nifty 50 after 12 months.</p></div>
-    <button class="btn primary" id="score">🎯 Score my calls</button></div>
-    <div class="grid g4" style="margin-bottom:18px">
-      <div class="card stat"><div class="l">Calls</div><div class="n">${s.calls ?? 0}</div></div>
-      <div class="card stat"><div class="l">Matured (12m+)</div><div class="n">${s.matured_12m ?? 0}</div></div>
-      <div class="card stat"><div class="l">Hit rate</div><div class="n">${s.hit_rate == null ? "—" : Math.round(s.hit_rate * 100) + "%"}</div></div>
-      <div class="card stat"><div class="l">Avg alpha</div><div class="n">${s.avg_alpha_all == null ? "—" : pct(s.avg_alpha_all)}</div></div>
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ IV · The ledger</div><h1>Every call, scored.</h1><p>Each published rating is checked against the Nifty 50 once twelve months have passed.</p></div>
+    <button class="btn primary" id="score">Score my calls</button></div>
+    <div class="strip">
+      <div><span class="l">Calls</span><b>${s.calls ?? 0}</b></div>
+      <div><span class="l">Matured (12m+)</span><b>${s.matured_12m ?? 0}</b></div>
+      <div><span class="l">Hit rate</span><b>${s.hit_rate == null ? "—" : Math.round(s.hit_rate * 100) + "%"}</b></div>
+      <div><span class="l">Avg alpha</span><b>${s.avg_alpha_all == null ? "—" : pct(s.avg_alpha_all)}</b></div>
     </div>
-    <div class="card" style="padding:6px 8px">${data.rows.length ? `<table class="t"><thead><tr><th>ID</th><th>Date</th><th>Company</th><th>Rating</th><th class="num">Target</th><th class="num">Price then</th><th>Reviewed</th><th class="num">Return</th><th class="num">Alpha</th><th>Verdict</th></tr></thead><tbody>
-      ${data.rows.map((r) => `<tr><td>${esc(r.call_id)}</td><td>${esc(r.call_date)}</td><td><b>${esc(r.company)}</b><div class="muted small">${esc(r.ticker)}</div></td>
+    <div class="sheet">${data.rows.length ? `<table class="t"><thead><tr><th>ID</th><th>Date</th><th>Company</th><th>Rating</th><th class="num">Target</th><th class="num">Price then</th><th>Reviewed</th><th class="num">Return</th><th class="num">Alpha</th><th>Verdict</th></tr></thead><tbody>
+      ${data.rows.map((r) => `<tr><td style="font-family:var(--mono)">${esc(r.call_id)}</td><td style="font-family:var(--mono)">${esc(r.call_date)}</td><td><b style="font:600 17px var(--serif)">${esc(r.company)}</b><div class="muted small" style="font-family:var(--mono)">${esc(r.ticker)}</div></td>
       <td>${ratingPill((r.rating || "").split(" ")[0])}</td><td class="num">${esc(r.target_price)}</td><td class="num">${esc(r.close_on_call_date)}</td>
-      <td>${esc(r.review_date || "—")}</td><td class="num">${r.stock_return ? pct(+r.stock_return) : "—"}</td><td class="num">${r.alpha ? pct(+r.alpha) : "—"}</td><td>${esc(r.verdict || "Not scored")}</td></tr>`).join("")}
-    </tbody></table>` : `<div class="empty"><div class="e">🎯</div>No calls yet. Each published research adds one.</div>`}</div>`;
+      <td style="font-family:var(--mono)">${esc(r.review_date || "—")}</td><td class="num">${r.stock_return ? pct(+r.stock_return) : "—"}</td><td class="num">${r.alpha ? pct(+r.alpha) : "—"}</td><td>${esc(r.verdict || "Not scored")}</td></tr>`).join("")}
+    </tbody></table>` : `<div class="empty"><div class="e">No calls yet</div>Each published research adds one line to the ledger.</div>`}</div>`;
   $("#score").onclick = async () => {
     const b = $("#score"); b.disabled = true; b.textContent = "Scoring…";
     try { await api("/api/calls/score", { method: "POST" }); toast("Calls scored"); renderCalls(); }
-    catch (e) { toast(e.message, 4000); b.disabled = false; b.textContent = "🎯 Score my calls"; }
+    catch (e) { toast(e.message, 4000); b.disabled = false; b.textContent = "Score my calls"; }
   };
 }
 
@@ -420,15 +479,16 @@ async function renderSettings() {
   const keyRow = (p) => {
     const k = s.keys[p.id] || {};
     return `<div class="keyrow"><b>${esc(p.label)}${p.use ? `<div class="hint" style="font-weight:400">${esc(p.use)}</div>` : ""}</b><input type="password" data-key="${p.id}" placeholder="${k.set ? "Saved — leave blank to keep" : "Paste API key"}" autocomplete="off">
-      <span class="state">${k.set ? `<span class="pill done">${esc(k.masked)}</span> <span class="muted tiny">${esc(k.source)}</span> ${k.source === "dashboard" ? `<button class="btn ghost danger" data-clear="${p.id}" type="button">Remove</button>` : ""}` : '<span class="pill demo">Not set</span>'}</span></div>`;
+      <span class="state">${k.set ? `<span class="pill done">${esc(k.masked)}</span> <span class="muted tiny">${esc(k.source)}</span> ${k.source === "dashboard" ? `<button class="btn ghost danger sm" data-clear="${p.id}" type="button">Remove</button>` : ""}` : '<span class="pill">Not set</span>'}</span></div>`;
   };
   const keyRows = s.providers.filter((p) => p.key).map(keyRow).join("");
   const dataKeyRows = (s.data_sources || []).map(keyRow).join("");
-  const desks = s.desks.map((d) => { const a = agentMeta(d); return `<label><input type="checkbox" data-desk="${d}" ${v.desks.includes(d) ? "checked" : ""}> ${a.icon} ${esc(a.title)}</label>`; }).join("");
-  view.innerHTML = `<div class="page-head"><div><h1>Settings</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
-  <div class="settings"><div class="toc"><a href="#s-models" data-jump>🧠 AI models</a><a href="#s-keys" data-jump>🔑 API keys</a><a href="#s-brief" data-jump>📝 Research brief</a><a href="#s-team" data-jump>👥 Research team</a><a href="#s-data" data-jump>🗄️ Data</a><a href="#s-val" data-jump>🧮 Valuation</a><a href="#s-brand" data-jump>🏷️ Report &amp; dashboard</a><a href="#s-store" data-jump>📁 Storage</a></div>
+  const desks = s.desks.map((d) => { const a = agentMeta(d); return `<label><input type="checkbox" data-desk="${d}" ${v.desks.includes(d) ? "checked" : ""}> <i>${code(d)}</i> ${esc(a.title)}</label>`; }).join("");
+  const sec = (n, title) => `<h3><span class="sn">§ ${n}</span>${title}</h3>`;
+  view.innerHTML = `<div class="page-head"><div><div class="kicker">№ V · Settings</div><h1>How the firm is run.</h1><p>Saved on this computer in <code>${esc(s.paths.settings)}</code>. API keys never leave your machine except to call the provider you choose.</p></div></div>
+  <div class="settings"><div class="toc"><a href="#s-models" data-jump><em>1</em>AI models</a><a href="#s-keys" data-jump><em>2</em>API keys</a><a href="#s-brief" data-jump><em>3</em>Research brief</a><a href="#s-team" data-jump><em>4</em>Research team</a><a href="#s-data" data-jump><em>5</em>Data</a><a href="#s-val" data-jump><em>6</em>Valuation</a><a href="#s-brand" data-jump><em>7</em>Report &amp; dashboard</a><a href="#s-store" data-jump><em>8</em>Storage</a></div>
   <form id="sform">
-  <section class="card" id="s-models"><h3>🧠 AI models</h3>
+  <section class="card" id="s-models">${sec(1, "AI models")}
     <div class="row2"><div class="field"><label class="f">Provider</label><select id="llm_provider">${provOpts}</select><div class="hint">Direct: Claude, OpenAI, Gemini, Grok, DeepSeek, Kimi, Qwen, Mistral, GLM, Llama, MiMo. Or OpenRouter, a local Ollama model, or any OpenAI-compatible server.</div></div>
     <div class="field" id="burl"><label class="f">Server URL</label><input id="backend_url" value="${esc(v.backend_url || "")}" placeholder="http://localhost:11434/v1"><div class="hint" id="burlhint"></div></div></div>
     <div class="row2"><div class="field"><label class="f">Senior model — CIO, Valuation, Chief Risk Officer</label><input id="deep_think_llm" value="${esc(v.deep_think_llm)}" list="models"></div>
@@ -441,27 +501,27 @@ async function renderSettings() {
     <div class="field"><label class="f">Report language</label><input id="output_language" value="${esc(v.output_language)}"></div></div>
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="button" data-test="deep">Test senior model</button><button class="btn" type="button" data-test="quick">Test analyst model</button><span class="small muted" id="testout">Save first, then test.</span></div>
   </section>
-  <section class="card" id="s-keys"><h3>🔑 API keys</h3>${keyRows}
-    <h3 style="margin-top:18px">🛟 Backup data sources <span class="muted small" style="font-weight:400">optional</span></h3>${dataKeyRows}<div class="hint">Keys entered here are stored in your settings file (readable only by you). Keys in your environment or <code>.env</code> also work.</div></section>
-  <section class="card" id="s-brief"><h3>📝 Research brief</h3>
+  <section class="card" id="s-keys">${sec(2, "API keys")}${keyRows}
+    <h3 style="margin-top:22px;font-size:20px">Backup data sources <span class="muted small" style="font:400 12px var(--sans)">optional</span></h3>${dataKeyRows}<div class="hint">Keys entered here are stored in your settings file (readable only by you). Keys in your environment or <code>.env</code> also work.</div></section>
+  <section class="card" id="s-brief">${sec(3, "Research brief")}
     <label class="f">Your standing instructions — the CIO and every desk follow them on every research</label>
-    <textarea id="research_brief" rows="9" style="width:100%;font:inherit;line-height:1.5">${esc(v.research_brief || "")}</textarea>
+    <textarea id="research_brief" rows="9" style="width:100%;line-height:1.5">${esc(v.research_brief || "")}</textarea>
     <div class="hint">Write it once, the way you would brief a research team. Leave it empty to use the firm's standard process only.</div>
   </section>
-  <section class="card" id="s-team"><h3>👥 Research team</h3>
-    <label class="f">Research desks the CIO can brief</label><div class="desk-check" style="margin-bottom:14px">${desks}</div>
+  <section class="card" id="s-team">${sec(4, "Research team")}
+    <label class="f">Research desks the CIO can brief</label><div class="desk-check" style="margin-bottom:16px">${desks}</div>
     <div class="row3"><div class="field"><label class="f">CIO revision rounds</label><input id="cio_revision_rounds" type="number" min="0" max="3" value="${v.cio_revision_rounds}"><div class="hint">How many times the CIO may send memos back.</div></div>
     <div class="field"><label class="f">Debate rebuttal rounds</label><input id="max_debate_rounds" type="number" min="0" max="4" value="${v.max_debate_rounds}"></div>
     <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="run_council" ${v.run_council ? "checked" : ""}> Independent council review</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="council_followup" ${v.council_followup ? "checked" : ""}> Fix the council's gaps before publishing</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="log_calls" ${v.log_calls ? "checked" : ""}> Add calls to the call log</label></div></div>
   </section>
-  <section class="card" id="s-data"><h3>🗄️ Data</h3>
+  <section class="card" id="s-data">${sec(5, "Data")}
     <div class="row3"><div class="field"><label class="switch"><input type="checkbox" id="fetch_documents" ${v.fetch_documents ? "checked" : ""}> Read annual reports &amp; concall transcripts</label></div>
     <div class="field"><label class="f">Reading depth</label><select id="document_mode"><option value="focused" ${v.document_mode === "focused" ? "selected" : ""}>Focused (key sections)</option><option value="full" ${v.document_mode === "full" ? "selected" : ""}>Every page (slow, costly)</option></select></div>
     <div class="field"><label class="f">News look-back (days)</label><input id="news_lookback_days" type="number" min="7" max="365" value="${v.news_lookback_days}"></div></div>
     <div class="row3"><div class="field"><label class="f">Annual reports to read</label><input id="max_annual_reports" type="number" min="0" max="10" value="${v.max_annual_reports}"></div>
     <div class="field"><label class="f">Concall transcripts to read</label><input id="max_concall_transcripts" type="number" min="0" max="8" value="${v.max_concall_transcripts}"></div></div>
   </section>
-  <section class="card" id="s-val"><h3>🧮 Valuation</h3>
+  <section class="card" id="s-val">${sec(6, "Valuation")}
     <div class="row3"><div class="field"><label class="f">Risk-free rate (10Y G-Sec, %)</label><input data-pct id="risk_free_rate" type="number" step="0.01" value="${P(v.risk_free_rate)}"></div>
     <div class="field"><label class="f">India equity risk premium (%)</label><input data-pct id="equity_risk_premium" type="number" step="0.01" value="${P(v.equity_risk_premium)}"></div>
     <div class="field"><label class="f">Tax rate (%)</label><input data-pct id="tax_rate" type="number" step="0.01" value="${P(v.tax_rate)}"></div></div>
@@ -470,16 +530,16 @@ async function renderSettings() {
     <div class="field"><label class="f">Margin of safety (%)</label><input data-pct id="margin_of_safety" type="number" step="1" value="${P(v.margin_of_safety)}"></div></div>
     <label class="f">Scenario probabilities (%) — bear / base / bull</label>
     <div class="row3"><input data-prob="bear" type="number" value="${P(v.scenario_probabilities.bear)}"><input data-prob="base" type="number" value="${P(v.scenario_probabilities.base)}"><input data-prob="bull" type="number" value="${P(v.scenario_probabilities.bull)}"></div>
-    <div class="row2" style="margin-top:14px"><div class="field"><label class="f">BUY if expected 12-month return is above (%)</label><input data-band="buy" type="number" value="${P(v.rating_bands.buy)}"></div>
+    <div class="row2" style="margin-top:16px"><div class="field"><label class="f">BUY if expected 12-month return is above (%)</label><input data-band="buy" type="number" value="${P(v.rating_bands.buy)}"></div>
     <div class="field"><label class="f">SELL if expected 12-month return is below (%)</label><input data-band="sell" type="number" value="${P(v.rating_bands.sell)}"></div></div>
   </section>
-  <section class="card" id="s-brand"><h3>🏷️ Report &amp; dashboard</h3>
+  <section class="card" id="s-brand">${sec(7, "Report &amp; dashboard")}
     <div class="row2"><div class="field"><label class="f">Firm name on reports</label><input id="firm_name" value="${esc(v.firm_name)}"></div>
     <div class="field"><label class="f">Analyst credit on reports</label><input id="analyst_name" value="${esc(v.analyst_name)}"></div></div>
     <div class="row2"><div class="field"><label class="f">Dashboard port</label><input id="port" type="number" value="${v.port}"><div class="hint">Takes effect next time you start the app.</div></div>
     <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="open_browser" ${v.open_browser ? "checked" : ""}> Open the browser automatically</label></div></div>
   </section>
-  <section class="card" id="s-store"><h3>📁 Storage</h3><div class="small">Research archive: <code>${esc(s.paths.research)}</code><br>Call log: <code>${esc(s.paths.call_log)}</code><br>App folder: <code>${esc(s.paths.home)}</code></div></section>
+  <section class="card" id="s-store">${sec(8, "Storage")}<div class="small">Research archive: <code>${esc(s.paths.research)}</code><br>Call log: <code>${esc(s.paths.call_log)}</code><br>App folder: <code>${esc(s.paths.home)}</code></div></section>
   <div class="savebar"><button class="btn" type="button" id="reset">Discard changes</button><button class="btn primary" type="submit">Save settings</button></div>
   </form></div>`;
   const REGIONAL = ["deepseek", "moonshot", "qwen", "mistral", "zai", "meta", "xiaomi"];
@@ -508,8 +568,8 @@ async function renderSettings() {
     $("#testout").textContent = "Calling the model…";
     try {
       const r = await api("/api/settings/test", { method: "POST", body: JSON.stringify({ tier: b.dataset.test }) });
-      $("#testout").innerHTML = r.ok ? `<span style="color:var(--green)">✓ Connected — model replied “${esc((r.reply || "").slice(0, 40))}”</span>` : `<span style="color:var(--red)">✗ ${esc(r.error)}</span>`;
-    } catch (e) { $("#testout").innerHTML = `<span style="color:var(--red)">✗ ${esc(e.message)}</span>`; }
+      $("#testout").innerHTML = r.ok ? `<span style="color:var(--green)">✓ Connected — model replied “${esc((r.reply || "").slice(0, 40))}”</span>` : `<span style="color:var(--oxblood)">✗ ${esc(r.error)}</span>`;
+    } catch (e) { $("#testout").innerHTML = `<span style="color:var(--oxblood)">✗ ${esc(e.message)}</span>`; }
   }));
   $("#sform").onsubmit = async (e) => {
     e.preventDefault();
@@ -535,7 +595,7 @@ async function renderSettings() {
     const api_keys = Object.fromEntries($$("[data-key]").filter((i) => i.value.trim()).map((i) => [i.dataset.key, i.value.trim()]));
     try {
       await api("/api/settings", { method: "PUT", body: JSON.stringify({ values, api_keys }) });
-      toast("Settings saved"); refreshModelChip(); renderSettings();
+      toast("Settings saved"); refreshMasthead(); renderSettings();
     } catch (err) { toast(err.message, 5000); }
   };
 }

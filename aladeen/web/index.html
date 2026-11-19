@@ -7,30 +7,31 @@
 <link rel="icon" type="image/png" href="/static/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..600&family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<div class="app">
-  <aside class="sidebar">
-    <a class="brand" href="#/">
-      <img class="brand-mark" src="/static/logo.png" alt="AlaDeen Capital Research logo">
-      <span><b>AlaDeen</b><small>Capital Research</small></span>
-    </a>
-    <nav>
-      <a href="#/" data-nav="home"><span>✦</span>New research</a>
-      <a href="#/office" data-nav="office"><span>🏢</span>Live office</a>
-      <a href="#/history" data-nav="history"><span>🗂️</span>Research archive</a>
-      <a href="#/calls" data-nav="calls"><span>🎯</span>Call log</a>
-      <a href="#/settings" data-nav="settings"><span>⚙️</span>Settings</a>
-    </nav>
-    <div class="sidebar-foot">
-      <div id="model-chip" class="model-chip">Loading…</div>
-      <div class="muted tiny">Not investment advice · Not SEBI-registered</div>
+<header class="masthead">
+  <div class="wrap">
+    <div class="dateline"><span id="dateline"></span><span>Mumbai · NSE &amp; BSE</span><span id="model-chip">Loading…</span></div>
+    <div class="titlebar">
+      <a class="brand" href="#/">
+        <img class="seal" src="/static/logo.png" alt="AlaDeen Capital Research seal">
+        <span class="wordmark"><b>AlaDeen</b><i>Capital Research</i></span>
+      </a>
+      <nav class="mainnav">
+        <a href="#/" data-nav="home"><em>I</em>Desk</a>
+        <a href="#/office" data-nav="office"><em>II</em>Floor</a>
+        <a href="#/history" data-nav="history"><em>III</em>Archive</a>
+        <a href="#/calls" data-nav="calls"><em>IV</em>Ledger</a>
+        <a href="#/settings" data-nav="settings"><em>V</em>Settings</a>
+      </nav>
     </div>
-  </aside>
-  <main id="view" class="view"></main>
-</div>
+  </div>
+  <div class="tape" aria-label="Published calls"><div class="tape-track" id="tape"></div></div>
+</header>
+<main id="view" class="view wrap"></main>
+<footer class="wrap foot"><span>Research only · not investment advice · not SEBI-registered</span><span>Prepared on this computer</span></footer>
 <div id="toast" class="toast"></div>
 <script src="/static/app.js"></script>
 </body>

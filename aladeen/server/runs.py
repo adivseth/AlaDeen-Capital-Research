@@ -43,11 +43,31 @@ class RunManager:
         ev = EventLog()
         with self._lock:
             self.live[run_id] = ev
-        threading.Thread(target=self._run, args=(run_id, cfg, ticker, day, demo, out_dir, ev), daemon=True,
-                         name=f"research-{run_id}").start()
+        self._spawn(run_id, cfg, ticker, day, demo, out_dir, ev)
         return run_id
 
-    def _run(self, run_id, cfg, ticker, day, demo, out_dir: Path, ev: EventLog) -> None:
+    def retry(self, run_id: str) -> str:
+        """Continue a failed research under the same id. It reuses every AI answer and the data already collected,
+        so only the work after the failure is done (and paid for) again. Uses the current Settings, so a wrong key
+        or a different provider can be fixed first."""
+        with self._lock:
+            rec = self.store.get(run_id)
+            if not rec:
+                raise KeyError(run_id)
+            if rec["status"] != "error":
+                raise ValueError("Only a failed research can be tried again")
+            self.store.update(run_id, status="running", error=None, finished_at=None, seconds=None)
+            ev = EventLog()
+            self.live[run_id] = ev
+        self._spawn(run_id, self.config(), rec["ticker"], date.fromisoformat(rec["as_of"]), bool(rec["demo"]),
+                    Path(rec["out_dir"]), ev, resume=True)
+        return run_id
+
+    def _spawn(self, run_id, cfg, ticker, day, demo, out_dir: Path, ev: EventLog, resume: bool = False) -> None:
+        threading.Thread(target=self._run, args=(run_id, cfg, ticker, day, demo, out_dir, ev, resume), daemon=True,
+                         name=f"research-{run_id}").start()
+
+    def _run(self, run_id, cfg, ticker, day, demo, out_dir: Path, ev: EventLog, resume: bool = False) -> None:
         t0 = time.time()
         kw = {}
         if demo:
@@ -57,7 +77,7 @@ class RunManager:
             kw = {"runner": demo_runner(delay=1.6), "factpack_loader": lambda t, d: synthetic_factpack(d)}
             ev.log("cio", "Demo mode: synthetic company and scripted agents. No AI model is called.")
         try:
-            state = ResearchRun(cfg, ticker, day, events=ev, out_dir=out_dir, **kw).run()
+            state = ResearchRun(cfg, ticker, day, events=ev, out_dir=out_dir, resume=resume, **kw).run()
             f, v = state["final"], state["valuation"]
             cv = (state.get("council") or {}).get("verdict") or {}
             self.store.update(run_id, status="done", finished_at=time.time(), company=state["fp"].name,

@@ -105,12 +105,14 @@ If `git pull` says your local changes would be overwritten (for example, you edi
 
 | Page | What it does |
 |---|---|
-| **New research** | Enter a ticker (TCS, RELIANCE, 532540…) and an analysis date, or try the demo. |
-| **Live office** | The firm at work: every agent at its desk with its current task, memos flying between desks, the 11-step process tracker and a live activity feed. |
+| **Desk** | Enter a ticker (TCS, RELIANCE, 532540…) and an analysis date, or try the demo. |
+| **Floor** | The firm at work: every agent at its desk with its current task, memos travelling between desks in pneumatic capsules, the process tracker and a live wire of what each desk is saying. |
 | **Report** | The finished report inside the dashboard, with **PDF** (browser print → Save as PDF) and **HTML** downloads, the full research file, and the raw data. |
-| **Research archive** | Every research you have run, searchable by company and rating. Open, re-download or delete. |
-| **Call log** | Every published rating; **Score my calls** updates prices and reports hit rate and alpha vs the Nifty 50. |
+| **Archive** | Every research you have run, searchable by company and rating. Open, re-download or delete. A research that stopped has a **Try again** button. |
+| **Ledger** | Every published rating; **Score my calls** updates prices and reports hit rate and alpha vs the Nifty 50. |
 | **Settings** | AI provider and models (see [AI providers](#ai-providers)), API keys, which desks to use, revision and debate rounds, council on/off, document reading, valuation inputs, report branding. |
+
+**When a research fails** (no credit, a rate limit, a closed dashboard), click **Try again** on the run page or in the archive, or run `aladeen retry`. The same research continues: every AI answer already received is kept and reused, so only the unfinished work is run and paid for. You may change the provider or key in Settings first.
 
 Everything stays on your computer: settings in `~/.aladeen/settings.json` (readable only by you), research in
 `~/.aladeen/research/`, the archive in `~/.aladeen/aladeen.db`.
@@ -205,6 +207,7 @@ methodology, glossary, sources and disclosures. It carries the company logo wher
 | `aladeen TICKER` | yes | Opens the dashboard and starts the research (same as `aladeen research TICKER`) |
 | `aladeen dashboard` | — | Opens the dashboard |
 | `aladeen demo` | no | Watch the firm research a synthetic company |
+| `aladeen retry [RUN_ID]` | yes | Continue a stopped research where it stopped (latest failed one if no id) |
 | `aladeen data TICKER` | no | Collect and check the data; print the fact sheet |
 | `aladeen value TICKER` | no | Deterministic valuation with default assumptions |
 | `aladeen track TICKER` | no | Quarterly tracker: last 5–10 trading days, prior call and its kill fact |

@@ -1,6 +1,6 @@
 """Command line: ``aladeen TCS`` opens the dashboard and starts the research.
 
-Other commands: ``dashboard``, ``demo``, ``data``, ``value``, ``track``, ``calls``, ``score``, ``config``.
+Other commands: ``dashboard``, ``demo``, ``retry``, ``data``, ``value``, ``track``, ``calls``, ``score``, ``config``.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ BANNER = (f"[bold #3730a3]AlaDeen Capital Research[/] v{__version__}\n"
           "[dim]An AI research firm for Indian listed companies, led by an AI Chief Investment Officer.\n"
           "Research only — not investment advice.[/]")
 
-COMMANDS = {"research", "dashboard", "demo", "data", "value", "track", "calls", "score", "config"}
+COMMANDS = {"research", "retry", "dashboard", "demo", "data", "value", "track", "calls", "score", "config"}
 
 
 def _date(s: str | None) -> date:
@@ -142,8 +142,10 @@ def _follow(port: int, run_id: str) -> dict:
 
 def _summary(rec: dict, url: str | None) -> None:
     if rec.get("status") != "done":
-        console.print(Panel(f"[red]{rec.get('error') or 'Research did not finish.'}[/]", title="Research stopped",
-                            border_style="red"))
+        again = (f"\n\n[bold]Continue the same research (finished work is kept):[/] aladeen retry {rec['id']}"
+                 if rec.get("id") else "")
+        console.print(Panel(f"[red]{rec.get('error') or 'Research did not finish.'}[/]{again}",
+                            title="Research stopped", border_style="red"))
         return
     t = Table(show_header=False, box=None)
     t.add_row("Company", rec["company"])
@@ -191,7 +193,11 @@ def _headless(ticker: str, on: str | None, demo: bool) -> None:
     from aladeen.server.runs import RunManager
 
     mgr = RunManager()
-    run_id = mgr.start(ticker, on, demo=demo)
+    _headless_follow(mgr, mgr.start(ticker, on, demo=demo))
+
+
+def _headless_follow(mgr, run_id: str) -> None:
+    """Mirror a run started by ``mgr`` in this terminal until it ends."""
     since = 0
     while True:
         res = mgr.events(run_id, since, 15)
@@ -228,6 +234,57 @@ def research(
         _headless(ticker, on, demo=False)
         return
     _launch(ticker, on, False, port, browser, follow=not quiet)
+
+
+def _failed_id(run_id: str | None, runs: list[dict]) -> str:
+    """The research to try again: the one named, else the latest failed one."""
+    if run_id:
+        return run_id
+    failed = [r for r in runs if r.get("status") == "error"]
+    if not failed:
+        console.print("[yellow]There is no failed research to try again.[/]")
+        raise typer.Exit(1)
+    return failed[0]["id"]  # the archive is newest first
+
+
+@app.command()
+def retry(
+    run_id: str | None = typer.Argument(None, help="Research id (default: the latest failed research)"),
+    port: int | None = typer.Option(None, help="Dashboard port (default from Settings, 8765)"),
+    browser: bool | None = typer.Option(None, "--browser/--no-browser", help="Open the dashboard in a browser"),
+    headless: bool = typer.Option(False, "--headless", help="No dashboard: run in this terminal only"),
+    quiet: bool = typer.Option(False, "--quiet", help="Do not mirror the office in the terminal"),
+):
+    """Try a failed research again. The same research continues: every finished AI answer is reused."""
+    console.print(Panel(BANNER, border_style="#6366f1"))
+    if headless:
+        from aladeen.server.runs import RunManager
+
+        mgr = RunManager()
+        run_id = _failed_id(run_id, mgr.store.list())
+        try:
+            mgr.retry(run_id)
+        except (KeyError, ValueError) as e:
+            console.print(f"[red]{e.args[0] if isinstance(e, KeyError) else e}[/]")
+            raise typer.Exit(2) from e
+        _headless_follow(mgr, run_id)
+        return
+    cfg = _cfg()
+    port = port or cfg["port"]
+    browser = cfg["open_browser"] if browser is None else browser
+    started = _ensure_dashboard(port, cfg["host"])
+    http = _http()
+    if not run_id:
+        run_id = _failed_id(None, http.get(_base(port) + "/api/runs", timeout=30).json())
+    r = http.post(f"{_base(port)}/api/runs/{run_id}/retry", timeout=30)
+    if not r.ok:
+        console.print(f"[red]{r.json().get('detail', r.text)}[/]")
+        raise typer.Exit(2)
+    url = f"{_base(port)}/#/run/{run_id}"
+    _open(url, browser)
+    if not quiet:
+        _summary(_follow(port, run_id), url)
+    _hold(started, port)
 
 
 @app.command()

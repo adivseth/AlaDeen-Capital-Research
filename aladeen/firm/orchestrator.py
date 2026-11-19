@@ -19,6 +19,7 @@ Every step is announced on an EventLog so the dashboard can show the office at w
 
 from __future__ import annotations
 
+import json
 import time
 import traceback
 from collections.abc import Callable
@@ -33,6 +34,7 @@ from aladeen.dataflows.symbols import normalize
 from aladeen.firm import context as cx
 from aladeen.firm import staff
 from aladeen.firm.events import EventLog
+from aladeen.firm.journal import JOURNAL_FILE, JournalRunner
 from aladeen.firm.schemas import ValuationAssumptions
 from aladeen.llm import LangChainRunner, Runner
 from aladeen.quant import audit as audit_mod
@@ -48,14 +50,22 @@ def _short(text: str, n: int = 220) -> str:
 class ResearchRun:
     def __init__(self, cfg: dict, ticker: str, as_of: date | str, *, runner: Runner | None = None,
                  events: EventLog | None = None, factpack_loader: Callable[[str, date], FactPack] | None = None,
-                 out_dir: str | Path | None = None):
+                 out_dir: str | Path | None = None, resume: bool = False):
+        """With ``out_dir``, every finished AI answer and the collected data are saved there as the research goes.
+        ``resume=True`` continues an earlier attempt in the same ``out_dir`` from those saved answers; without it,
+        any leftovers in ``out_dir`` are cleared and the research starts from scratch."""
         self.cfg = cfg
         self.ticker = ticker
         self.as_of = as_of if isinstance(as_of, date) else date.fromisoformat(as_of)
-        self.runner = runner or LangChainRunner(cfg)
+        self.resume = resume
+        self.out_dir = out_dir
+        if out_dir and not resume:
+            for name in (JOURNAL_FILE, "prior_calls.json"):
+                (Path(out_dir) / name).unlink(missing_ok=True)
+        self._inner = runner or LangChainRunner(cfg)
+        self.runner = JournalRunner(self._inner, Path(out_dir) / JOURNAL_FILE) if out_dir else self._inner
         self.ev = events or EventLog()
         self.factpack_loader = factpack_loader
-        self.out_dir = out_dir
         self.state: dict[str, Any] = {"ticker": ticker, "as_of": self.as_of.isoformat(), "errors": [],
                                       "audit": {}, "revisions": []}
 
@@ -95,13 +105,18 @@ class ResearchRun:
     def _data(self) -> None:
         self.ev.phase("data")
         self.ev.message("cio", "data", f"Pull everything we have on {self.ticker} as of {self.as_of}.")
-        self._work("data", "Collecting statements, prices, filings and news")
-        fp = (self.factpack_loader(self.ticker, self.as_of) if self.factpack_loader
-              else build_factpack(self.ticker, self.as_of, self.cfg, progress=lambda m: self._work("data", m)))
+        fp = self._saved_factpack()
+        if fp is not None:
+            self._work("data", "Reusing the fact pack collected on the earlier attempt")
+        else:
+            self._work("data", "Collecting statements, prices, filings and news")
+            fp = (self.factpack_loader(self.ticker, self.as_of) if self.factpack_loader
+                  else build_factpack(self.ticker, self.as_of, self.cfg, progress=lambda m: self._work("data", m)))
         if not fp.screener.get("tables", {}).get("profit_loss", {}).get("rows"):
             raise RuntimeError(f"No financial statements found for {self.ticker}. " + "; ".join(fp.warnings))
         if fp.prices is None or fp.prices.empty:
             raise RuntimeError(f"No price history for {self.ticker}. " + "; ".join(fp.warnings))
+        self._save_factpack(fp)  # a failure from here on can be continued without collecting the data again
         self._work("data", "Reconciling statements, computing ratios, technicals and charts")
         q = compute_quant(fp, self.cfg)
         self.state.update(fp=fp, quant=q, company=fp.name)
@@ -113,13 +128,54 @@ class ResearchRun:
                             f"checks passed; {len(caveats)} data caveats.", "\n".join(caveats))
         self.ev.emit("company", name=fp.name, ticker=fp.ticker, exchange=fp.exchange, logo=fp.company.get("logo"))
         self._done("data", "Fact pack delivered to the CIO")
-        try:
-            rows = calllog.store_from_config(self.cfg).read()
-            self.state["prior_calls"] = calllog.prior_calls(rows, normalize(self.ticker).yahoo)
-        except Exception as e:  # noqa: BLE001
-            self.state["prior_calls"] = []
-            self.state["errors"].append(f"Call log unavailable: {e}")
+        saved = self._saved_prior_calls()
+        if saved is not None:
+            self.state["prior_calls"] = saved
+        else:
+            try:
+                rows = calllog.store_from_config(self.cfg).read()
+                self.state["prior_calls"] = calllog.prior_calls(rows, normalize(self.ticker).yahoo)
+            except Exception as e:  # noqa: BLE001
+                self.state["prior_calls"] = []
+                self.state["errors"].append(f"Call log unavailable: {e}")
+            self._save_json("prior_calls.json", self.state["prior_calls"])
         self.ev.phase("data", "done")
+
+    # ------------------------------------------------------------------ what a retry reuses
+    # The prompts quote the fact pack and the prior calls, so both are frozen on the first attempt: the retry then
+    # asks the models exactly the same questions and the saved answers are found again.
+    def _saved_path(self, name: str) -> Path | None:
+        return Path(self.out_dir) / name if self.out_dir else None
+
+    def _saved_factpack(self) -> FactPack | None:
+        p = self._saved_path("factpack.json")
+        if not (self.resume and p and p.exists()):
+            return None
+        try:
+            return FactPack.load(p)
+        except (ValueError, TypeError, KeyError):
+            return None  # unreadable: collect the data again
+
+    def _save_factpack(self, fp: FactPack) -> None:
+        p = self._saved_path("factpack.json")
+        if p:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            fp.save(p)
+
+    def _saved_prior_calls(self) -> list[dict] | None:
+        p = self._saved_path("prior_calls.json")
+        if not (self.resume and p and p.exists()):
+            return None
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            return None
+
+    def _save_json(self, name: str, data: Any) -> None:
+        p = self._saved_path(name)
+        if p:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps(data, default=str), encoding="utf-8")
 
     def _mandate(self) -> None:
         self.ev.phase("mandate")
@@ -445,9 +501,9 @@ class ResearchRun:
     # ------------------------------------------------------------------ run
     def _preflight(self) -> None:
         """Fail in seconds, not minutes: build both model clients (no call is made) before any data work."""
-        if isinstance(self.runner, LangChainRunner):
-            self.runner._model("deep")
-            self.runner._model("quick")
+        if isinstance(self._inner, LangChainRunner):
+            self._inner._model("deep")
+            self._inner._model("quick")
 
     def run(self) -> dict:
         t0 = time.time()
@@ -458,6 +514,9 @@ class ResearchRun:
         steps += [self._status, self._publish]
         try:
             self._preflight()
+            if self.resume and isinstance(self.runner, JournalRunner) and self.runner.restored:
+                self.ev.log("cio", f"Continuing the earlier research: {self.runner.restored} finished AI answers "
+                                   "are reused, so the firm picks up where it stopped.")
             for step in steps:
                 step()
         except Exception as e:
@@ -467,7 +526,8 @@ class ResearchRun:
         f, v = self.state["final"], self.state["valuation"]
         self.ev.emit("done", rating=f["rating"], qualifier=f.get("qualifier"), target_price=v["target_price"],
                      cmp=v["cmp"], upside=v["upside"], headline=f["headline"], seconds=round(time.time() - t0, 1),
-                     llm_calls=len(getattr(self.runner, "calls", [])))
+                     llm_calls=len(getattr(self.runner, "calls", [])),
+                     reused_calls=getattr(self.runner, "replayed", 0))
         return self.state
 
 

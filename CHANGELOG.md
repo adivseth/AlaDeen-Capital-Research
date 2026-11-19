@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Try again for failed research.** A stopped research can be continued under the same id from the run page,
+  the archive or `aladeen retry [RUN_ID]`. Each AI answer is journaled (`journal.jsonl`) and the fact pack is frozen,
+  so the retry reuses all finished work and runs only what is left. Works after a closed dashboard and after
+  switching provider or key. New endpoint `POST /api/runs/{id}/retry`.
+- **Dashboard redesign ("The Research Desk").** New visual identity: a printed research bulletin crossed with a
+  trading-floor board. Paper and ink with one vermilion accent, Fraunces / IBM Plex type, rubber-stamp ratings,
+  ticker-tape masthead, desk-code floor board, pneumatic memo capsules, a telegraph-style activity wire and ledger
+  rows. Replaces the sidebar, gradients, emoji and cartoon avatars. Behaviour is unchanged.
+
 ## 0.1.0 — 2026-11-19
 
 First public release.

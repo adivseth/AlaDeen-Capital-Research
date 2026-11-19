@@ -170,6 +170,16 @@ def create_app(home_dir: str | None = None) -> FastAPI:
         rec["research"] = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
         return rec
 
+    @app.post("/api/runs/{run_id}/retry")
+    def retry(run_id: str):
+        """Try a failed research again: the same research continues from where it stopped."""
+        try:
+            return {"id": mgr.retry(run_id)}
+        except KeyError as e:
+            raise HTTPException(404, "Research not found") from e
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from e
+
     @app.get("/api/runs/{run_id}/events")
     def events(run_id: str, since: int = 0, wait: float = 10.0):
         _rec(run_id)
