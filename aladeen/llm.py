@@ -90,12 +90,22 @@ def _extract_json(text: str) -> Any:
     return json.loads(text[start:end + 1])
 
 
+def _unsupported_response_format(exc: Exception) -> bool:
+    if getattr(exc, "status_code", None) != 400:
+        return False
+    message = str(exc).lower()
+    return ("response_format" in message
+            and any(term in message for term in ("unavailable", "not available", "not supported",
+                                                 "unsupported", "does not support", "unknown parameter")))
+
+
 class LangChainRunner:
     """Runs prompts on LangChain chat models with two tiers: ``deep`` and ``quick``."""
 
     def __init__(self, cfg: dict):
         self.cfg = cfg
         self._models: dict[str, Any] = {}
+        self._plain_json_tiers: set[str] = set()
         self._no_temp: set[str] = set()
         self.calls: list[dict] = []
         self._lock = threading.Lock()
@@ -145,16 +155,22 @@ class LangChainRunner:
 
         t0 = time.time()
         msgs = [SystemMessage(system), HumanMessage(user)]
-        try:
-            out = self._invoke(tier, msgs, structured=schema)
-            if isinstance(out, schema):
-                self._log(name, tier, t0)
-                return out
-            if isinstance(out, dict):
-                self._log(name, tier, t0)
-                return schema.model_validate(out)
-        except (ValidationError, NotImplementedError, ValueError, TypeError):
-            pass
+        with self._lock:
+            use_native = tier not in self._plain_json_tiers
+        if use_native:
+            try:
+                out = self._invoke(tier, msgs, structured=schema)
+                if isinstance(out, dict):
+                    out = schema.model_validate(out)
+                if isinstance(out, schema):
+                    self._log(name, tier, t0)
+                    return out
+            except Exception as exc:
+                if _unsupported_response_format(exc):
+                    with self._lock:
+                        self._plain_json_tiers.add(tier)
+                elif not isinstance(exc, (ValidationError, NotImplementedError, ValueError, TypeError)):
+                    raise
         # Fallback: ask for JSON explicitly and validate it
         schema_json = json.dumps(schema.model_json_schema())
         msgs = [SystemMessage(system + "\n\nReturn ONLY a JSON object that matches this JSON schema:\n"
