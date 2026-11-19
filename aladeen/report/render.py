@@ -244,6 +244,8 @@ def build_context(state: dict, cfg: dict) -> dict[str, Any]:
 
 
 def render_report(state: dict, cfg: dict) -> str:
+    if state.get("decision_pending"):
+        return _env().get_template("pending.html.j2").render(**state)
     return _env().get_template("report.html.j2").render(**build_context(state, cfg))
 
 
@@ -324,7 +326,9 @@ def transcript_md(state: dict) -> str:
                 f"**Aggressive lens:** {rr['aggressive']}", "", f"**Neutral lens:** {rr['neutral']}", "",
                 f"**Conservative lens:** {rr['conservative']}", "", f"**Recommendation:** {rr['recommendation']}", ""]
     f = state.get("final") or {}
-    if f:
+    if state.get("report_status") == "draft":
+        out += ["## Decision pending", state["draft_reason"]]
+    elif f:
         out += ["## CIO decision", f"**Rating:** {f.get('rating')}{' (' + f['qualifier'] + ')' if f.get('qualifier') else ''}"
                 f" · **Position:** {f.get('position_size')} · **Governance:** {f.get('governance_score')}", "",
                 f"**Headline:** {f.get('headline', '')}", "", f.get("executive_summary", ""), "",
@@ -355,7 +359,8 @@ def transcript_md(state: dict) -> str:
 def _jsonable(state: dict) -> dict:
     keep = ["ticker", "as_of", "memos", "revisions", "assumptions", "debate", "final", "rating_check", "council",
             "audit", "errors", "prior_calls", "call_id", "valuation_revisions"]
-    out = {k: state.get(k) for k in keep}
+    out = {k: state.get(k) for k in keep + ["report_status", "draft_reason", "decision_pending"]}
+    out["fact_resolutions"] = state["fp"].fact_resolutions
     for k in ("mandate", "desk_review", "debate_verdict", "risk_review"):
         out[k] = _plain(state.get(k))
     v = dict(state.get("valuation", {}))
@@ -380,7 +385,7 @@ def save_outputs(state: dict, cfg: dict, out_dir: str | Path | None = None) -> d
 def log_call(state: dict, cfg: dict, report_path: str | Path) -> dict | None:
     """Append the call to the call log (closing prices on the report date)."""
     fp, v, f = state["fp"], state["valuation"], state["final"]
-    if fp.synthetic:
+    if fp.synthetic or state.get("report_status") == "draft":
         return None
     bench_close = None
     if fp.benchmark_prices is not None and not fp.benchmark_prices.empty:

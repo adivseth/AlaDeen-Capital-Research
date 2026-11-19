@@ -149,8 +149,9 @@ def _summary(rec: dict, url: str | None) -> None:
         return
     t = Table(show_header=False, box=None)
     t.add_row("Company", rec["company"])
-    t.add_row("Rating", f"[bold]{rec['rating']}[/] {rec.get('qualifier') or ''}")
-    t.add_row("CMP / Target", f"₹{rec['cmp']:,.2f} / ₹{rec['target_price']:,.2f} ({rec['upside'] * 100:+.1f}%)")
+    t.add_row("Rating", f"[bold]{rec['rating'] or 'Pending'}[/] {rec.get('qualifier') or ''}")
+    if rec.get("target_price") is not None:
+        t.add_row("CMP / Target", f"₹{rec['cmp']:,.2f} / ₹{rec['target_price']:,.2f} ({rec['upside'] * 100:+.1f}%)")
     if rec.get("headline"):
         t.add_row("Headline", rec["headline"])
     if rec.get("council_verdict"):
@@ -354,9 +355,11 @@ def value(ticker: str, on: str | None = typer.Option(None, "--date")):
     from aladeen.quant.engine import compute_quant, value_company
 
     cfg = _cfg()
-    cfg["fetch_documents"] = False
     fp = build_factpack(ticker, _date(on), cfg)
     q = compute_quant(fp, cfg, with_charts=False)
+    if q["valuation_blockers"]:
+        console.print(cx.company_md(fp))
+        raise typer.Exit(1)
     res = value_company(q, cfg)
     console.print(cx.valuation_md(res.as_dict()))
     console.print("[dim]Default assumptions only. In a full research the Valuation Analyst sets them and the CIO "

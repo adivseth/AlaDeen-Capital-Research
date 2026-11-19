@@ -247,6 +247,8 @@ class ResearchRun:
                     self._done(r.desk, "Memo filed with CIO notes")
                 break
             self._revise(to_revise, round_no + 1)
+        s["evidence_gaps"] = [f'{r["period"]} {r["scope"]} {r["metric"]}' for r in s["quant"]["valuation_blockers"]]
+        s["evidence_gaps"].extend(review.unresolved_material_conflicts)
         self.ev.agent("cio", "waiting", "Waiting for the valuation")
         self.ev.phase("review", "done")
 
@@ -466,6 +468,11 @@ class ResearchRun:
         notes = ("## The independent council found these gaps. Send a desk back only if its memo must change "
                  "to close a gap; accept the rest.\n" + "\n".join(f"- {g}" for g in gaps))
         review = staff.cio_review(self.runner, self.cfg, s["mandate"], s["memos"], notes)
+        if review.unresolved_material_conflicts:
+            s["evidence_gaps"].extend(review.unresolved_material_conflicts)
+            self.ev.log("cio", "Decision held for primary evidence: " + "; ".join(review.unresolved_material_conflicts))
+            self.ev.phase("followup", "done")
+            return
         to_revise = [r for r in review.reviews if r.verdict == "revise" and r.desk in s["memos"]]
         if not to_revise:
             self.ev.log("cio", "No desk memo needs to change for the council's gaps; they are disclosed in the report.")
@@ -503,10 +510,17 @@ class ResearchRun:
         s = self.state
         cv = (s.get("council") or {}).get("verdict") or {}
         incomplete = bool(cv) and not cv.get("report_complete", True)
-        s["report_status"] = "draft" if incomplete and self.cfg.get("block_incomplete_reports", True) else "final"
+        gaps = s["evidence_gaps"] + (cv.get("unresolved_material_conflicts") or [])
+        s["report_status"] = "final"
+        if gaps:
+            s.update(report_status="draft", draft_reason="Verify against the primary documentation: " + "; ".join(gaps))
+        elif incomplete and self.cfg.get("block_incomplete_reports", True):
+            s.update(report_status="draft", draft_reason="The independent council found gaps that could change the call: "
+                     + "; ".join(cv.get("gaps_in_report") or ["see the council section"]))
         if s["report_status"] == "draft":
-            s["draft_reason"] = ("The independent council found gaps that could change the call: "
-                                 + "; ".join(cv.get("gaps_in_report") or ["see the council section"]))
+            if gaps or not s["fp"].synthetic:
+                s.update(decision_pending=True, final={"rating": None, "headline": "Awaiting evidence review"},
+                         valuation={"target_price": None, "upside": None, "cmp": s["quant"]["market"]["cmp"]})
             self.ev.log("cio", "Report held as a DRAFT: " + _short(s["draft_reason"], 300))
 
     def _publish(self) -> None:
@@ -516,7 +530,7 @@ class ResearchRun:
         s = self.state
         self._work("editor", "Typesetting the report")
         s["_runner"] = self.runner
-        if self.cfg.get("review_baseline"):
+        if self.cfg.get("review_baseline") and s.get("report_status") != "draft":
             s.setdefault("valuation_revisions", []).append(evidence_revision(
                 self.cfg["review_baseline"], s["valuation"], self.cfg["review_reason"]))
         paths = save_outputs(s, self.cfg, self.out_dir)
@@ -551,12 +565,15 @@ class ResearchRun:
                 self.ev.log("cio", f"Continuing the earlier research: {self.runner.restored} finished AI answers "
                                    "are reused, so the firm picks up where it stopped.")
             for step in steps:
+                if step == self._valuation and self.state["evidence_gaps"]:
+                    break
                 step()
-            prior_band = (self.cfg.get("review_baseline") or {}).get("band_rating")
-            changed = prior_band and prior_band != self.state["valuation"]["band_rating"]
-            if self.cfg.get("run_council", True) or (changed and self.cfg.get("council_on_band_change")):
-                self._council()
-                self._followup()
+            if not self.state["evidence_gaps"]:
+                prior_band = (self.cfg.get("review_baseline") or {}).get("band_rating")
+                changed = prior_band and prior_band != self.state["valuation"]["band_rating"]
+                if self.cfg.get("run_council", True) or (changed and self.cfg.get("council_on_band_change")):
+                    self._council()
+                    self._followup()
             self._status()
             self._publish()
         except Exception as e:

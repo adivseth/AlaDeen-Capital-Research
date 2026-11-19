@@ -60,6 +60,11 @@ def company_md(fp: FactPack) -> str:
         "",
         f"About: {c.get('about') or 'n/a'}",
     ]
+    if fp.fact_resolutions:
+        from aladeen.dataflows.authority import summary
+
+        lines += ["Annual facts controlling this research (omit unresolved values):",
+                  *(summary(f) for f in fp.fact_resolutions)]
     if c.get("pros") or c.get("cons"):
         lines += ["", "Screener auto-generated pros: " + "; ".join(c.get("pros", [])),
                   "Screener auto-generated cons: " + "; ".join(c.get("cons", []))]

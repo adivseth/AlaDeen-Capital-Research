@@ -41,6 +41,9 @@ class FilingAssessment(BaseModel):
 class DeskReviewSet(BaseModel):
     """The CIO's review of the desk memos."""
 
+    unresolved_material_conflicts: list[str] = Field(default_factory=list, description=(
+        "Only specific unresolved factual contradictions that could change valuation or the rating. "
+        "Identify both claims, the sources, and the underlying filing or order needed."))
     reviews: list[MemoReview]
     synthesis: str = Field(..., description="What the team's work says so far, in 4-8 sentences")
 
@@ -173,4 +176,7 @@ class CouncilVerdict(BaseModel):
     verdict: Literal["INVEST", "DO NOT INVEST", "WAIT"]
     one_thing_first: str
     gaps_in_report: list[str] = Field(default_factory=list)
+    unresolved_material_conflicts: list[str] = Field(default_factory=list, description=(
+        "Contradictory facts that remain unsupported by primary documentation and could change the call. "
+        "Identify claims, sources and the primary evidence required."))
     report_complete: bool

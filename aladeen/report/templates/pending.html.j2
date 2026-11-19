@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ fp.name }} — research draft</title>
+<style>body{max-width:65rem;margin:3rem auto;padding:0 1rem;font:1rem/1.6 system-ui;color:#193452}td,th{padding:.5rem;text-align:left;border-bottom:1px solid #ccd5df}pre{white-space:pre-wrap;font:inherit}summary{cursor:pointer}</style>
+<body><main><h1>{{ fp.name }} · DRAFT research report</h1><p>{{ fp.ticker }} · {{ fp.as_of }}</p>
+<h2>Rating and target price pending</h2><p>{{ draft_reason }}</p><p>This call has not been filed in the call log.</p>
+{% include "facts.html.j2" %}
+{% for desk, memo in memos.items() %}<details><summary>{{ desk|title }} working memo</summary><pre>{{ memo }}</pre></details>{% endfor %}
+</main></body></html>

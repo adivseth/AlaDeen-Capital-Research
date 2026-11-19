@@ -96,10 +96,13 @@ def market_snapshot(fp: FactPack, st: dict, tech: dict, cfg: dict) -> dict[str, 
 
 
 def compute_quant(fp: FactPack, cfg: dict, with_charts: bool = True) -> dict[str, Any]:
+    fp.resolve_facts()
     st = statements.build_statements(fp)
     tech = technicals.summarize(fp.prices, fp.benchmark_prices)
     q: dict[str, Any] = {
         "statements": st,
+        "valuation_blockers": [f for f in fp.fact_resolutions if f["status"] == "unresolved"
+                               and (f["metric"] != "Dividend Payout %" or st["is_financial"])],
         "growth": statements.growth_table(st["annual"]) if not st["annual"].empty else {},
         "reconciliation": statements.reconcile(fp, st),
         "technicals": tech,
@@ -118,7 +121,7 @@ def compute_quant(fp: FactPack, cfg: dict, with_charts: bool = True) -> dict[str
         q["bank"] = bank_defaults(st, q["book"], cfg)
         q["bank"]["pb_history"] = val.historical_pb(fp.prices, annual.get("BVPS"))
     q["consensus"] = consensus(fp)
-    if not annual.empty and "Revenue" in annual and not st["is_financial"]:
+    if not q["valuation_blockers"] and "Revenue" in annual and annual["Revenue"].notna().any() and not st["is_financial"]:
         q["default_dcf_inputs"] = val.default_dcf_inputs(annual, cfg)
     roe_hist = annual.get("ROE %")
     q["roe_3y_avg"] = (float(roe_hist.dropna().tail(3).mean() / 100)
@@ -204,6 +207,8 @@ def capital_inputs(q: dict, cfg: dict, beta_override: float | None = None,
 
 def value_company(q: dict, cfg: dict, assumptions: dict | None = None) -> val.ValuationResult:
     """Run the valuation with the analyst's assumptions (or history-based defaults)."""
+    if q.get("valuation_blockers"):
+        raise ValueError("Valuation pending reconciliation to filed accounts")
     a = {k: v for k, v in (assumptions or {}).items() if v is not None}
     mk = q["market"]
     cap = capital_inputs(q, cfg, a.get("beta"), a.get("cost_of_debt_pre_tax"), a.get("debt_to_capital"),

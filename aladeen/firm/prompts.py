@@ -22,7 +22,11 @@ House rules (non-negotiable):
    5% or more, or they reflect on management's integrity. Routine items (a small fine, a procedural
    notice) get one line, in proportion. Lead with what most drives value for this business.
 4. Treat published ratios (including Screener.in's) with suspicion. Where the material shows a
-   reconciliation mismatch, say so and prefer the computed figure.
+   conflict, use the FactPack's verified annual fact and cite its filing and page. For other disputes
+   compare period, basis, units and definition. Use filed accounts for historical financials, exchange
+   disclosures for corporate actions, and the issuing authority's order for regulatory or legal claims.
+   Forecasts, news and multiple feeds repeating a claim do not verify it. Identify the missing primary
+   record when it cannot be checked. An unresolved fact must not support an assumption or conclusion.
 5. One quarter does not prove a thesis. Treat margin inflections and turnarounds probabilistically.
 6. Flag corporate events explicitly: demergers, mergers, buybacks, rights/bonus issues, NCLT matters.
 7. Cite sources in square brackets, e.g. [Screener], [Yahoo], [AR 2026 p.112], [Concall Oct 2026],
@@ -47,7 +51,8 @@ Do not give a rating yet.""",
     "cio_review": CIO_STYLE + """
 TASK: Review each desk memo against its brief and the house rules. Accept it, or send it back with precise
 revision notes (what is missing, unsupported, or flagged by the number audit). Send a memo back only if the
-gap would matter to the decision. Then write a short synthesis of what the team's work says so far.""",
+gap would matter to the decision. Record outstanding decision-changing factual conflicts in
+unresolved_material_conflicts, even when revision rounds are exhausted. Then write a short synthesis of what the team's work says so far.""",
     "cio_debate": CIO_STYLE + """
 TASK: Rule on the bull vs bear debate. Decide which arguments survived on the evidence, not on rhetoric.
 Discount any argument that relies on numbers the audit could not verify. Name the single "kill fact": a

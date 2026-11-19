@@ -41,7 +41,7 @@ function toast(msg, ms = 2600) {
 
 // A rating is a rubber stamp; a status is a lamp and a word.
 function ratingPill(r, q, size = "") {
-  if (!r) return "";
+  if (!r) return "Pending";
   return `<span class="stamp ${esc(r)} ${size}">${esc(r)}${q ? " · " + esc(q) : ""}</span>`;
 }
 function statusPill(s, demo) {
@@ -237,7 +237,7 @@ function feedItem(e) {
     return `<li class="err">${tm}<div><div class="who">Stopped</div><div class="tx">${esc(e.text)}</div></div></li>`;
   }
   if (e.type === "done") {
-    return `<li class="fin">${tm}<div><div class="who">Published</div><div class="tx">${esc(e.rating)}${e.qualifier ? " (" + esc(e.qualifier) + ")" : ""} · target ${inr(e.target_price)} · ${pct(e.upside)} · ${esc(e.seconds)}s · ${esc(e.llm_calls)} AI calls${e.reused_calls ? ` · ${esc(e.reused_calls)} answers reused from the earlier attempt` : ""}</div></div></li>`;
+    return `<li class="fin">${tm}<div><div class="who">Published</div><div class="tx">${esc(e.rating || "Decision pending")}${e.qualifier ? " (" + esc(e.qualifier) + ")" : ""} · target ${inr(e.target_price)} · ${pct(e.upside)} · ${esc(e.seconds)}s · ${esc(e.llm_calls)} AI calls${e.reused_calls ? ` · ${esc(e.reused_calls)} answers reused from the earlier attempt` : ""}</div></div></li>`;
   }
   return "";
 }

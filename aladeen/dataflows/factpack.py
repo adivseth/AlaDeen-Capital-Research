@@ -16,7 +16,7 @@ from uuid import uuid4
 
 import pandas as pd
 
-from aladeen.dataflows import backups, yahoo
+from aladeen.dataflows import authority, backups, yahoo
 from aladeen.dataflows import documents as docs_mod
 from aladeen.dataflows import logo as logo_mod
 from aladeen.dataflows import news as news_mod
@@ -45,13 +45,25 @@ class FactPack:
     sources: list[dict] = field(default_factory=list)
     synthetic: bool = False
 
+    captured_on: str | None = None
+    fact_resolutions: list[dict] = field(default_factory=list)
+
+    def resolve_facts(self) -> None:
+        self.fact_resolutions = authority.resolve(self)
+
     # ------------------------------------------------------------ helpers
     @property
     def name(self) -> str:
         return self.company.get("name") or self.ticker
 
     def table(self, key: str) -> dict:
-        return self.screener.get("tables", {}).get(key, {"columns": [], "rows": {}})
+        table = self.screener.get("tables", {}).get(key, {"columns": [], "rows": {}})
+        if key != "profit_loss" or not self.fact_resolutions:
+            return table
+        rows = {name: list(values) for name, values in table["rows"].items()}
+        for fact in self.fact_resolutions:
+            rows[fact["row"]][table["columns"].index(fact["period"])] = fact["value"]
+        return {**table, "rows": rows}
 
     def warn(self, msg: str) -> None:
         if msg not in self.warnings:
@@ -69,7 +81,9 @@ class FactPack:
         d = json.loads(text)
         d["prices"] = _records_to_df(d.get("prices"))
         d["benchmark_prices"] = _records_to_df(d.get("benchmark_prices"))
-        return cls(**d)
+        fp = cls(**d)
+        fp.resolve_facts()
+        return fp
 
     def save(self, path: str | Path) -> None:
         Path(path).write_text(self.to_json(), encoding="utf-8")
@@ -110,7 +124,7 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
         return frozen
     http = http or Http(cache_dir=cfg["cache_dir"], timeout=cfg["http_timeout"])
     fp = FactPack(
-        ticker=sym.base, yahoo_symbol=sym.yahoo, exchange=sym.exchange, as_of=as_of.isoformat(),
+        captured_on=date.today().isoformat(), ticker=sym.base, yahoo_symbol=sym.yahoo, exchange=sym.exchange, as_of=as_of.isoformat(),
         benchmark=cfg.get("benchmark") if sym.exchange == "NSE" else sym.benchmark,
     )
     if (date.today() - as_of).days > 7:
@@ -216,6 +230,8 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
                                 max_presentations=cfg.get("max_presentations", 2))
         for d in docs:
             rec = d.as_dict()
+            rec["filed_on"] = next((a.get("date") for a in sc_["documents"].get("announcements", [])
+                                         if a.get("url") == d.url and a.get("date")), None)
             rec["text"] = d.text
             fp.documents.append(rec)
             if d.error:
@@ -242,6 +258,7 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
                 + ". Per-share history (EPS, book value, prices) must be on the post-split basis.")
     if not fp.yahoo.get("info", {}).get("targetMeanPrice") and not fp.web:
         fp.warn("No broker consensus target in the sources.")
+    fp.resolve_facts()
     if snapshots is not None and not fp.prices.empty and fp.table("profit_loss").get("rows"):
         snapshots.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%dT%H%M%S%f")

@@ -383,6 +383,7 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 
 <section class="card">
   <h2><span class="num">APPENDIX A2</span> Data quality, reconciliation and number audit</h2>
+  {% include "facts.html.j2" %}
   <p><b>Reconciliation:</b> {{ reconciliation|length - rec_failed|length }} of {{ reconciliation|length }} checks passed.</p>
   {% if rec_failed %}<table><tr><th class="l">Check</th><th>Period</th><th>Expected</th><th>Reported</th><th>Difference</th></tr>
   {% for r in rec_failed %}<tr><td class="l">{{ r.check }}</td><td>{{ r.period }}</td><td>{{ r.expected|num(2) }}</td><td>{{ r.actual|num(2) }}</td><td>{{ r.difference|num(2) }}</td></tr>{% endfor %}</table>{% endif %}
@@ -437,7 +438,7 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
   <p class="small">Process: the Data &amp; Quant Desk collects and reconciles the data → the CIO sets the mandate and briefs each research desk → desks write memos in parallel → Compliance audits them and the CIO reviews (weak memos go back for revision) → the Valuation Analyst sets assumptions and the engine does all arithmetic → Bull and Bear Advocates debate and the CIO names the kill fact → the Chief Risk Officer stress-tests the view → the CIO signs the decision → Compliance enforces the rating bands → an independent council reviews the signed report. Methodology: Damodaran (Investment Valuation), Graham (The Intelligent Investor), Graham &amp; Dodd (Security Analysis), calibrated for India.</p>
   </div></div>
   {% for num, table_key in [('06','profit_loss'),('07','balance_sheet'),('08','cash_flow')] %}
-  {% set raw = fp.table(table_key) %}
+  {% set raw = fp.screener.get("tables", {}).get(table_key, {"columns": [], "rows": {}}) %}
   <details id="evidence-{{ num }}"><summary>{{ table_key|replace('_',' ')|title }} · captured source rows</summary>
   <p>Original reported periods and labels. Amounts in ₹ crore, per-share data in ₹, percentage rows as labelled.
   {% if fp.screener.get('url') %}<a href="{{ fp.screener.url }}">Open company statement</a>{% endif %}</p>

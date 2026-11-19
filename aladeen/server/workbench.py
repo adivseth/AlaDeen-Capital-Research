@@ -32,8 +32,12 @@ SIGNALS = {
 
 
 def filings(sc):
-    items = sc.get("documents", {}).get("announcements", [])
-    return {item["url"]: item for item in items if item.get("url")}
+    documents = sc.get("documents", {})
+    items = {item["url"]: item for item in documents.get("announcements", []) if item.get("url")}
+    for report in documents.get("annual_reports", []):
+        if url := report.get("url"):
+            items[url] = {**report, **items.get(url, {}), "annual_report": True}
+    return items
 
 
 def report_changes(old, new):
@@ -127,7 +131,9 @@ def router(mgr):
 
     @api.put("/{run}/pin")
     def pin(run: str, enabled: bool = True):
-        record(run)
+        rec = record(run)
+        if enabled and research(rec).get("decision_pending"):
+            raise HTTPException(409, "Awaiting a signed rating")
         with connect() as c:
             c.execute("INSERT OR IGNORE INTO pins VALUES (?)" if enabled else "DELETE FROM pins WHERE run=?", (run,))
         return {"pinned": enabled}
@@ -208,6 +214,8 @@ def router(mgr):
 
         def series(source, table, *keys):
             t = source.get("tables", {}).get(table, {})
+            if not row and source is sc:
+                t = fp.table(table)
             values = next((t["rows"][k] for k in keys if k in t.get("rows", {})), [])
             return dict(zip(t.get("columns", []), values, strict=False))
 
@@ -269,6 +277,7 @@ def router(mgr):
             review=bool(changes or any(e["new"] for e in events)),
             kill_fact=(old.get("final") or {}).get("kill_fact"),
             tables=sc.get("tables", {}),
+            fact_resolutions=[] if row else fp.fact_resolutions,
             source=sc.get("url"),
             peers=fp.peers,
             forecasts=(old.get("valuation", {}).get("dcf") or {}).get("projections", []),
@@ -310,6 +319,8 @@ def router(mgr):
     @api.post("/{run}/review")
     def review(run: str):
         rec = record(run)
+        if research(rec).get("decision_pending"):
+            raise HTTPException(409, "Start fresh research to verify the disputed evidence")
         data = evidence(run)
         if not data["dates"]:
             raise HTTPException(409, "Refresh filings and results before reviewing the signed baseline.")
@@ -346,6 +357,11 @@ def router(mgr):
                         desk="governance",
                         reason="New governance disclosure requires an independent review.",
                         affected_inputs=[e["title"] for e in new if set(e["signals"]) - {"Results"}],
+                    )
+                elif any(e.get("annual_report") for e in new):
+                    assessment = FilingAssessment(
+                        action="revalue", desk="filings", reason="Reconcile the newly filed annual accounts.",
+                        affected_inputs=["Annual financial statements and valuation inputs"],
                     )
                 elif rec.get("demo"):
                     assessment = FilingAssessment(
@@ -407,6 +423,8 @@ def router(mgr):
         rec = record(run)
         cfg = mgr.config()
         q = compute_quant(pack(rec), cfg, with_charts=False)
+        if q["valuation_blockers"] or research(rec).get("decision_pending"):
+            raise HTTPException(409, "Awaiting evidence review")
         assumptions = dict(research(rec).get("assumptions") or {})
         assumptions["cost_of_equity_premium"] = premium / 100
         result = value_company(q, cfg, assumptions)

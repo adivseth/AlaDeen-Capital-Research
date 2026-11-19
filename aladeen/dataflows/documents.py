@@ -13,6 +13,7 @@ import io
 import re
 from dataclasses import dataclass, field
 
+from aladeen.dataflows.authority import filed_rows
 from aladeen.dataflows.http import DataUnavailable, Http
 
 ANNUAL_REPORT_KEYWORDS = {
@@ -36,11 +37,13 @@ class Document:
     error: str | None = None
     selected_pages: list[int] = field(default_factory=list)
 
+    filed_rows: list[dict] = field(default_factory=list)
+
     def as_dict(self) -> dict:
         return {
             "kind": self.kind, "title": self.title, "url": self.url, "period": self.period,
             "pages": self.pages, "chars": len(self.text), "error": self.error,
-            "selected_pages": self.selected_pages[:60],
+            "selected_pages": self.selected_pages[:60], "filed_rows": self.filed_rows,
         }
 
 
@@ -98,6 +101,9 @@ def load_document(http: Http, kind: str, title: str, url: str, period: str | Non
         # shortcut: backup text has no page breaks, so 4,000-character chunks stand in for pages
         pages = [text[i:i + 4000] for i in range(0, len(text), 4000)]
         doc.title = f"{title} (read via {source})"
+    else:
+        if kind == "annual_report":
+            doc.filed_rows = filed_rows(pages)
     doc.pages = len(pages)
     if kind == "annual_report" and mode == "focused":
         doc.text, doc.selected_pages = select_pages(pages, budget)

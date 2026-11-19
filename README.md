@@ -239,6 +239,8 @@ save to the archive).
 | BSE (via Screener links) | Annual reports, concall transcripts | BSE may block automated downloads from some networks; the report then says which documents could not be read. |
 | Google News RSS | Headlines | Headlines only; never treated as facts about financials. |
 
+**When sources disagree.** For March year-end revenue, PAT and dividend payout, the FactPack can use scope-matched rows extracted from exchange-hosted annual reports or issuer-hosted copies when both company profiles agree on the issuer domain. Each resolution keeps the vendor readings, filed row, PDF page, unit and period. A textual payout percentage alone cannot establish a payout ratio. Material revenue or PAT differences (above both ₹5 crore and 3% of the Screener value) without comparable filed evidence hold valuation. Unresolved payout holds a residual-income valuation. The CIO can also flag other decision-changing factual contradictions during memo review. Independent desk work remains available in the draft. A fresh research run can use newly available or revised filings. Scanned PDFs and unrecognised table layouts may require manual review.
+
 **Backup data sources (optional).** Add keys in Settings → Backup data sources and the app uses them only when
 the primary source fails: **Alpha Vantage** for price history when Yahoo Finance fails (a free key may return only
 the last 100 trading days), and **Firecrawl** then **Exa** to read annual reports and concall transcripts when BSE

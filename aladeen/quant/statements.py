@@ -224,6 +224,8 @@ def reconcile(fp: FactPack, st: dict) -> list[dict]:
             for d, v in sorted((yinc.get(ylabel) or {}).items(), reverse=True):
                 label = f"FY{d[2:4]}" if d[5:7] == "03" else None
                 if v is not None and label in ann.index and mlabel in ann and _num(ann.at[label, mlabel]):
+                    if any(f["metric"] == mlabel and fy_label(f["period"]) == label for f in fp.fact_resolutions):
+                        break  # the cited resolution retains both original vendor readings
                     checks.append(_check(f"{mlabel}: Screener vs Yahoo (Rs Cr)", label,
                                          ann.at[label, mlabel], v / 1e7, 5, 0.03))
                     break
