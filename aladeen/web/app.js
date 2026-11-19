@@ -256,6 +256,7 @@ async function renderRun(id) {
   <div class="tabs" id="tabs">
     <button data-tab="office" class="on">Floor board</button>
     <button data-tab="report">Report</button>
+    <button data-tab="chat" hidden>Ask this research</button>
     <button data-tab="file">Working papers</button>
     <button data-tab="downloads">Exhibits</button>
   </div>
@@ -265,6 +266,7 @@ async function renderRun(id) {
     </div>
   </div>
   <div id="tab-report" hidden></div>
+  <div id="tab-chat" hidden></div>
   <div id="tab-file" hidden></div>
   <div id="tab-downloads" hidden></div>`;
   $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab, rec)));
@@ -275,13 +277,14 @@ async function renderRun(id) {
 
 function showTab(tab, rec) {
   $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === tab));
-  ["office", "report", "file", "downloads"].forEach((t) => ($("#tab-" + t).hidden = t !== tab));
+  ["office", "report", "chat", "file", "downloads"].forEach((t) => ($("#tab-" + t).hidden = t !== tab));
   const id = encodeURIComponent(rec.id);
   if (tab === "report") {
     $("#tab-report").innerHTML = rec.status === "done" || $("#banner").dataset.done
       ? `<iframe class="reportframe" src="/api/runs/${id}/report"></iframe>`
       : `<div class="empty"><div class="e">Not yet filed</div>The report appears here when the CIO signs off.</div>`;
   }
+  if (tab === "chat" && !$("#tab-chat").firstChild) openResearchChat(id, rec);
   if (tab === "file") loadTranscript(id);
   if (tab === "downloads") {
     $("#tab-downloads").innerHTML = `<div class="exhibits">
@@ -293,6 +296,45 @@ function showTab(tab, rec) {
       ${exhibit("F", "Event log", "Timeline of the floor (JSON)", `/api/runs/${id}/file/events.json`)}
     </div>`;
   }
+}
+
+function openResearchChat(id, rec) {
+  const panel = $("#tab-chat");
+  const history = [];
+  panel.innerHTML = `<div class="research-chat">
+    <h2>Ask this research</h2>
+    <p>${esc(rec.company || rec.ticker)} · ${esc(rec.as_of)} · ${rec.demo ? "Offline demo — returns matching excerpts" : "Answers from this run’s saved evidence"}</p>
+    <div class="chat-thread" role="log" aria-live="polite"></div>
+    <form><label class="f" for="research-question">Your question</label>
+      <input id="research-question" type="text" maxlength="1600" required placeholder="What assumptions drive the target price?">
+      <button class="btn primary" type="submit">Send</button></form>
+    <p role="status"></p></div>`;
+  const form = $("form", panel), input = $("input", form), send = $("button", form);
+  const thread = $(".chat-thread", panel), status = $("[role=status]", panel);
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const question = input.value.trim();
+    if (!question || send.disabled) return;
+    input.disabled = send.disabled = true;
+    status.textContent = "Searching the saved research…";
+    try {
+      const result = await api(`/api/runs/${id}/chat`, {
+        method: "POST", body: JSON.stringify({question, history: history.slice(-4)})
+      });
+      const sources = result.sources.map(s => `<details><summary>[${s.id}] ${esc(s.section)}</summary>
+        <p>${esc(s.excerpt)}</p></details>`).join("");
+      thread.insertAdjacentHTML("beforeend", `<article><h3>${esc(question)}</h3>
+        <p>${esc(result.answer)}</p>${sources}</article>`);
+      history.push({question, answer: result.answer.slice(0, 2400)});
+      input.value = "";
+      status.textContent = "";
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      input.disabled = send.disabled = false;
+      if (panel.isConnected && !panel.hidden) input.focus();
+    }
+  };
 }
 
 function exhibit(letter, title, sub, href, newTab = false) {
@@ -314,6 +356,7 @@ function showBanner(rec) {
   const b = $("#banner");
   const id = encodeURIComponent(rec.id);
   b.dataset.done = "1";
+  $('[data-tab="chat"]').hidden = false;
   b.innerHTML = `<div class="verdict">
     <div><div class="vk">Rating</div>${ratingPill(rec.rating, rec.qualifier, "lg")}</div>
     <div><div class="vk">Target price</div><div class="vv">${inr(rec.target_price)}</div></div>

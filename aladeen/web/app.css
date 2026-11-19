@@ -353,3 +353,13 @@ table.t th.num,table.t td.num{text-align:right;font-family:var(--mono);font-vari
 [data-wpanel] summary { cursor: pointer; }
 [data-wtab]:disabled { opacity: 1; color: var(--cyan); border-color: var(--cyan); }
 #wbRun { max-width: 100%; }
+
+.research-chat{max-width:54rem;margin:auto}
+.research-chat form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem}
+.research-chat label{grid-column:1/-1}
+.research-chat input{width:100%;min-width:0}
+.chat-thread article{padding:1rem 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
+.chat-thread p{white-space:pre-wrap}
+.chat-thread details{margin:.35rem 0;color:var(--tx2)}
+.chat-thread summary{cursor:pointer}
+.research-chat form{margin-top:1.25rem}

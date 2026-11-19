@@ -16,6 +16,7 @@ from aladeen import __version__
 from aladeen.config import DESKS, EDITABLE, PROVIDER_KEY_ENV, load_config, read_settings, settings_path
 from aladeen.dataflows import backups
 from aladeen.firm.roster import roster_payload
+from aladeen.server import chat
 from aladeen.server.runs import RunManager
 from aladeen.server.workbench import router as workbench_router
 
@@ -171,6 +172,13 @@ def create_app(home_dir: str | None = None) -> FastAPI:
         p = Path(rec["out_dir"]) / "research.json"
         rec["research"] = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
         return rec
+
+    @app.post("/api/runs/{run_id}/chat")
+    def research_chat(run_id: str, payload: chat.ChatRequest):
+        rec = _rec(run_id)
+        if rec["status"] != "done":
+            raise HTTPException(409, "Chat opens when this research run finishes.")
+        return chat.answer(rec, payload, mgr.config())
 
     @app.post("/api/runs/{run_id}/retry")
     def retry(run_id: str):
