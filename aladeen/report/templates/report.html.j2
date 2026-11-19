@@ -215,7 +215,7 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 <section class="card c3">
   <h2><span class="num">SECTION {{ num }}</span> {{ title }}</h2>
   <div class="tablewrap"><table><tr><th class="l">Particulars</th>{% for c in tbl.cols %}<th>{{ c }}</th>{% endfor %}</tr>
-  {% for r in tbl.rows %}<tr class="{{ 'b' if r.bold else '' }}"><td>{{ r.label }}</td>{% for x in r['values'] %}<td>{{ x }}</td>{% endfor %}</tr>{% endfor %}</table></div>
+  {% for r in tbl.rows %}<tr class="{{ 'b' if r.bold else '' }}"><td>{{ r.label }}</td>{% for x in r['values'] %}<td><a href="#evidence-{{ num }}" title="View source statement and period">{{ x }}</a></td>{% endfor %}</tr>{% endfor %}</table></div>
   <p class="small">Source: Screener.in ({{ 'consolidated' if fp.screener.get('consolidated') else 'standalone' }}). Figures as reported; checks in Appendix A2.</p>
 </section>
 {% endfor %}
@@ -431,6 +431,14 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
     <tr><td class="l"><b style="color:var(--sell)">SELL</b></td><td class="l">Below {{ (cfg.rating_bands.sell*100)|round|int }}%</td></tr></table>
   <p class="small">Process: the Data &amp; Quant Desk collects and reconciles the data → the CIO sets the mandate and briefs each research desk → desks write memos in parallel → Compliance audits them and the CIO reviews (weak memos go back for revision) → the Valuation Analyst sets assumptions and the engine does all arithmetic → Bull and Bear Advocates debate and the CIO names the kill fact → the Chief Risk Officer stress-tests the view → the CIO signs the decision → Compliance enforces the rating bands → an independent council reviews the signed report. Methodology: Damodaran (Investment Valuation), Graham (The Intelligent Investor), Graham &amp; Dodd (Security Analysis), calibrated for India.</p>
   </div></div>
+  {% for num, table_key in [('06','profit_loss'),('07','balance_sheet'),('08','cash_flow')] %}
+  {% set raw = fp.table(table_key) %}
+  <details id="evidence-{{ num }}"><summary>{{ table_key|replace('_',' ')|title }} · captured source rows</summary>
+  <p>Original reported periods and labels. Amounts in ₹ crore, per-share data in ₹, percentage rows as labelled.
+  {% if fp.screener.get('url') %}<a href="{{ fp.screener.url }}">Open company statement</a>{% endif %}</p>
+  <div class="tablewrap"><table><tr><th>Metric</th>{% for c in raw.columns %}<th>{{ c }}</th>{% endfor %}</tr>
+  {% for label, values in raw.rows.items() %}<tr><td>{{ label }}</td>{% for x in values %}<td>{{ x if x is not none else '—' }}</td>{% endfor %}</tr>{% endfor %}</table></div></details>
+  {% endfor %}
   {% if sources %}<h3>Sources</h3><ul class="small">{% for s in sources %}<li><a href="{{ s.url }}">{{ s.name }}</a></li>{% endfor %}</ul>{% endif %}
 </section>
 

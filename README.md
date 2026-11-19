@@ -117,6 +117,16 @@ If `git pull` says your local changes would be overwritten (for example, you edi
 Everything stays on your computer: settings in `~/.aladeen/settings.json` (readable only by you), research in
 `~/.aladeen/research/`, the archive in `~/.aladeen/aladeen.db`.
 
+## Research monitor
+
+Open **Monitor** from a completed Archive row. Pin a signed baseline, refresh filings and results, then inspect each new disclosure beside the thesis invalidation condition. **Start targeted research review** launches a separate CIO-led run with the financial statements and filings desks, adding governance when a new disclosure matches a governance term. Refreshes use the announcements available on the company page. A match calls for analyst review.
+
+- **Earnings** compares reporting periods and revisions, earlier report assumptions and target prices. Record an expected metric for an upcoming quarter before observing the actual. Annual revenue forecasts come from the archived DCF where available.
+- **Evidence** lets you choose the original financial tables or a later dated refresh. New HTML reports link their financial statements to the captured source rows. Full data collections also save point-in-time FactPacks locally. A historical run selects the latest pack collected by the requested date and stops if no eligible snapshot exists. Historical replay starts with snapshots collected by this version.
+- **Valuation** filters industry peers and ranks archived companies by available sector metrics. Change the company-specific equity premium to recalculate the archived assumptions using the current engine settings.
+- **Governance** highlights disclosures mentioning auditor changes, audit opinions, promoter pledges and related parties, and compares cash from operations with reported profit.
+- **Portfolio** accepts INR allocations against filed calls and a benchmark symbol per holding. Performance uses common adjusted closing prices for a buy-and-hold portfolio with a common inception after publication. It shows holding contributions, sector weights and peak-to-trough drawdown. The Ledger also compares stock, broad index and sector benchmark returns using provider-adjusted series. Price indices exclude dividends unless a total-return series is selected.
+
 ## The firm
 
 The **CIO** is the orchestrator. It decides what to investigate, reviews every memo, and signs the call.
@@ -222,7 +232,7 @@ save to the archive).
 
 | Source | Used for | Limits |
 |---|---|---|
-| [Screener.in](https://www.screener.in) | Statements, quarters, shareholding, peers, document links | Unofficial HTML; layout changes can break the parser. Some published ratios are wrong (recomputed and flagged). Fundamentals are "as of today", not point-in-time. |
+| [Screener.in](https://www.screener.in) | Statements, quarters, shareholding, peers, document links | Unofficial HTML; layout changes can break the parser. Some published ratios are wrong (recomputed and flagged). Live fundamentals reflect the collection date. Historical runs use locally captured snapshots. |
 | Yahoo Finance (yfinance) | Daily prices, Nifty 50, balance-sheet cross-check | Rate limits; occasional gaps. |
 | BSE (via Screener links) | Annual reports, concall transcripts | BSE may block automated downloads from some networks; the report then says which documents could not be read. |
 | Google News RSS | Headlines | Headlines only; never treated as facts about financials. |

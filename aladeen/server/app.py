@@ -17,6 +17,7 @@ from aladeen.config import DESKS, EDITABLE, PROVIDER_KEY_ENV, load_config, read_
 from aladeen.dataflows import backups
 from aladeen.firm.roster import roster_payload
 from aladeen.server.runs import RunManager
+from aladeen.server.workbench import router as workbench_router
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 
@@ -66,6 +67,7 @@ def create_app(home_dir: str | None = None) -> FastAPI:
     app = FastAPI(title="AlaDeen Capital Research", version=__version__, docs_url=None, redoc_url=None)
     mgr = RunManager(home_dir)
     app.state.mgr = mgr
+    app.include_router(workbench_router(mgr))
 
     # ------------------------------------------------------------------ pages
     @app.get("/", response_class=HTMLResponse)

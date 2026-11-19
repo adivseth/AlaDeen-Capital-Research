@@ -343,3 +343,13 @@ table.t th.num,table.t td.num{text-align:right;font-family:var(--mono);font-vari
   .mainnav{width:100%} .mainnav a{padding:0 10px;font-size:14px}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Archived research workbench */
+[data-wpanel] { margin-top: 18px; padding: clamp(16px, 3vw, 32px); background: var(--s1); border: 1px solid var(--line); border-radius: var(--r2); }
+[data-wpanel][hidden] { display: none; }
+[data-wpanel] h3, [data-wpanel] .sheet { margin: 18px 0 10px; }
+[data-wpanel] label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 8px 6px 0; }
+[data-wpanel] details { padding: 12px 0; border-bottom: 1px solid var(--line); }
+[data-wpanel] summary { cursor: pointer; }
+[data-wtab]:disabled { opacity: 1; color: var(--cyan); border-color: var(--cyan); }
+#wbRun { max-width: 100%; }
