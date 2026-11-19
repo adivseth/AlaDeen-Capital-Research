@@ -108,6 +108,7 @@ If `git pull` says your local changes would be overwritten (for example, you edi
 | **Desk** | Enter a ticker (TCS, RELIANCE, 532540…) and an analysis date, or try the demo. |
 | **Floor** | The firm at work: every agent at its desk with its current task, memos travelling between desks in pneumatic capsules, the process tracker and a live wire of what each desk is saying. |
 | **Report** | The finished report inside the dashboard, with **PDF** (browser print → Save as PDF) and **HTML** downloads, the full research file, and the raw data. |
+| **Ask this research** | Open a completed run to ask about its thesis, valuation or evidence. The configured quick model answers from saved excerpts with expandable citations. Follow-ups remember the last four exchanges while the run page is open. The offline demo shows matching excerpts. |
 | **Archive** | Every research you have run, searchable by company and rating. Open, re-download or delete. A research that stopped has a **Try again** button. |
 | **Ledger** | Every published rating; **Score my calls** updates prices and reports hit rate and alpha vs the Nifty 50. |
 | **Settings** | AI provider and models (see [AI providers](#ai-providers)), API keys, which desks to use, revision and debate rounds, council on/off, document reading, valuation inputs, report branding. |
