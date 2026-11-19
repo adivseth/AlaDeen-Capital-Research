@@ -27,7 +27,7 @@ class RunManager:
     def config(self) -> dict:
         return load_config({"home_dir": self.home_dir} if self.home_dir else None)
 
-    def start(self, ticker: str, as_of: str | None = None, demo: bool = False) -> str:
+    def start(self, ticker: str, as_of: str | None = None, demo: bool = False, review: dict | None = None) -> str:
         cfg = self.config()
         ticker = ticker.strip()
         if demo:
@@ -37,6 +37,9 @@ class RunManager:
         day = date.fromisoformat(as_of) if as_of else date.today()
         run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{safe_component(ticker.upper())}-{secrets.token_hex(2)}"
         out_dir = Path(cfg["results_dir"]) / run_id
+        if review:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "review.json").write_text(json.dumps(review), encoding="utf8")
         self.store.insert(id=run_id, ticker=ticker.upper(), company=ticker.upper(), as_of=day.isoformat(),
                           status="running", out_dir=str(out_dir), demo=int(demo), llm_provider=cfg["llm_provider"],
                           deep_model=cfg["deep_think_llm"], quick_model=cfg["quick_think_llm"])
@@ -77,6 +80,11 @@ class RunManager:
             kw = {"runner": demo_runner(delay=1.6), "factpack_loader": lambda t, d: synthetic_factpack(d)}
             ev.log("cio", "Demo mode: synthetic company and scripted agents. No AI model is called.")
         try:
+            context = out_dir / "review.json"
+            if context.exists():
+                review = json.loads(context.read_text(encoding="utf8"))
+                cfg["desks"] = review["desks"]
+                cfg["research_brief"] += "\nReview the prior thesis against the updated filings. Prior report: " + review["thesis"]
             state = ResearchRun(cfg, ticker, day, events=ev, out_dir=out_dir, resume=resume, **kw).run()
             f, v = state["final"], state["valuation"]
             cv = (state.get("council") or {}).get("verdict") or {}

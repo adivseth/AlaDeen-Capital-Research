@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 
@@ -98,6 +99,15 @@ def _records_to_df(rec: dict | None) -> pd.DataFrame:
 def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = None,
                    progress=lambda msg: None) -> FactPack:
     sym: Symbol = normalize(ticker)
+    snapshots = Path(cfg["home_dir"]) / "snapshots" / sym.yahoo if cfg.get("home_dir") else None
+    if as_of < date.today() and snapshots is not None:
+        candidates = sorted((p for p in snapshots.glob("*.json") if p.name[:10] <= as_of.isoformat()), reverse=True)
+        if not candidates:
+            raise DataUnavailable(f"No archived evidence captured by {as_of} for {sym.yahoo}")
+        frozen = FactPack.load(candidates[0])
+        frozen.warn(f"Historical replay uses the complete snapshot captured on {candidates[0].name[:10]}.")
+        frozen.as_of = as_of.isoformat()
+        return frozen
     http = http or Http(cache_dir=cfg["cache_dir"], timeout=cfg["http_timeout"])
     fp = FactPack(
         ticker=sym.base, yahoo_symbol=sym.yahoo, exchange=sym.exchange, as_of=as_of.isoformat(),
@@ -232,4 +242,11 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
                 + ". Per-share history (EPS, book value, prices) must be on the post-split basis.")
     if not fp.yahoo.get("info", {}).get("targetMeanPrice") and not fp.web:
         fp.warn("No broker consensus target in the sources.")
+    if snapshots is not None and not fp.prices.empty and fp.table("profit_loss").get("rows"):
+        snapshots.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%dT%H%M%S%f")
+        target = snapshots / f"{stamp}-{uuid4().hex}.json"
+        tmp = target.with_suffix(".tmp")
+        fp.save(tmp)
+        tmp.replace(target)
     return fp

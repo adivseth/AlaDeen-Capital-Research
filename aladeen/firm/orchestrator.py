@@ -134,7 +134,8 @@ class ResearchRun:
         else:
             try:
                 rows = calllog.store_from_config(self.cfg).read()
-                self.state["prior_calls"] = calllog.prior_calls(rows, normalize(self.ticker).yahoo)
+                self.state["prior_calls"] = (calllog.prior_calls(rows, normalize(self.ticker).yahoo)
+                                             if self.as_of >= date.today() else [])
             except Exception as e:  # noqa: BLE001
                 self.state["prior_calls"] = []
                 self.state["errors"].append(f"Call log unavailable: {e}")

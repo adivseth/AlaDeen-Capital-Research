@@ -67,6 +67,7 @@ async function route() {
       return renderEmptyOffice();
     }
     if (page === "history") return await renderHistory();
+    if (page === "monitor") return await renderWorkbench(id);
     if (page === "calls") return await renderCalls();
     if (page === "settings") return await renderSettings();
     await renderHome();
@@ -431,8 +432,8 @@ async function renderHistory() {
       <td>${statusPill(r.status, r.demo)}</td><td>${ratingPill(r.rating, r.qualifier)}</td>
       <td class="num">${inr(r.target_price, 0)}</td><td class="num">${inr(r.cmp, 0)}</td><td class="num">${r.status === "done" ? pct(r.upside) : "—"}</td>
       <td>${esc(r.council_verdict || "—")}</td><td class="small muted">${when(r.created_at)}</td>
-      <td style="white-space:nowrap">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button> ` : ""}<button class="btn ghost danger sm" data-del="${esc(r.id)}" title="Delete this research">Delete</button></td></tr>`).join("");
-    $$("#rows tr").forEach((tr) => (tr.onclick = (ev) => { if (!ev.target.closest("[data-del],[data-retry]")) location.hash = "#/run/" + tr.dataset.id; }));
+      <td style="white-space:nowrap">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button> ` : ""}${r.status === "done" ? `<a class="btn sm" href="#/monitor/${esc(r.id)}">Monitor</a>` : ""}<button class="btn ghost danger sm" data-del="${esc(r.id)}" title="Delete this research">Delete</button></td></tr>`).join("");
+    $$("#rows tr").forEach((tr) => (tr.onclick = (ev) => { if (!ev.target.closest("[data-del],[data-retry],a")) location.hash = "#/run/" + tr.dataset.id; }));
     $$("[data-retry]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); retryResearch(b.dataset.retry, b); }));
     $$("[data-del]").forEach((b) => (b.onclick = async (ev) => {
       ev.stopPropagation();
@@ -463,6 +464,13 @@ async function renderCalls() {
       <td>${ratingPill((r.rating || "").split(" ")[0])}</td><td class="num">${esc(r.target_price)}</td><td class="num">${esc(r.close_on_call_date)}</td>
       <td class="mono">${esc(r.review_date || "—")}</td><td class="num">${r.stock_return ? pct(+r.stock_return) : "—"}</td><td class="num">${r.alpha ? pct(+r.alpha) : "—"}</td><td>${esc(r.verdict || "Not scored")}</td></tr>`).join("")}
     </tbody></table>` : `<div class="empty"><div class="e">No calls yet</div>Each published research adds one line to the ledger.</div>`}</div>`;
+  if (data.rows.length) {
+    view.insertAdjacentHTML("beforeend", '<section class="panel"><h2>Dividend-adjusted comparison</h2><label>Call <select id="returnCall">'+data.rows.map(r=>'<option value="'+esc(r.call_id)+'">'+esc(r.company)+' · '+esc(r.call_date)+'</option>').join("")+'</select></label> <label>Sector benchmark symbol <input id="sectorIndex" placeholder="e.g. ^NSEBANK"></label> <button class="btn" id="returnCompare">Compare returns</button><div id="adjusted"></div></section>');
+    wbAction("#returnCompare",async()=>{
+      const r=await api("/api/workbench/call-returns?"+new URLSearchParams({call_id:$("#returnCall").value,sector_benchmark:$("#sectorIndex").value}));
+      $("#adjusted").innerHTML="<p>"+esc(r.start)+" – "+esc(r.end)+" · Returns use provider-adjusted closes. Index series follow the selected index methodology.</p>"+wbTable(["Symbol","Return"],Object.entries(r.returns).map(([symbol,v])=>[symbol,pct(v)]));
+    });
+  }
   $("#score").onclick = async () => {
     const b = $("#score"); b.disabled = true; b.textContent = "Scoring…";
     try { await api("/api/calls/score", { method: "POST" }); toast("Calls scored"); renderCalls(); }
