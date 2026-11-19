@@ -123,7 +123,7 @@ def build_factpack(ticker: str, as_of: date, cfg: dict, *, http: Http | None = N
     progress("Screener.in: financial statements, shareholding, documents")
     sc = ScreenerClient(http)
     try:
-        fp.screener = sc.company(sym.screener_slug)
+        fp.screener = cfg.get("review_screener") or sc.company(sym.screener_slug)
         fp.sources.append({"name": "Screener.in company page", "url": fp.screener.get("url")})
         if not fp.screener.get("consolidated"):
             fp.warn("Screener shows standalone figures (no consolidated statements available).")

@@ -42,3 +42,60 @@ def test_historical_replay_excludes_later_captures(cfg, tmp_path):
     fp = build_factpack("DEMO", cutoff, cfg)
     assert fp.as_of == str(cutoff)
     assert fp.prices.index.max().date() <= cutoff
+
+
+def test_monitor_routes_changed_evidence_and_reuses_decisions(tmp_path, monkeypatch):
+    import json
+    import sqlite3
+
+    from fastapi.testclient import TestClient
+
+    from aladeen.firm.schemas import FilingAssessment
+    from aladeen.server import workbench
+    from aladeen.server.app import create_app
+
+    app = create_app(str(tmp_path))
+    client = TestClient(app)
+    mgr = app.state.mgr
+    folder = tmp_path / "published"
+    folder.mkdir()
+    fp = synthetic_factpack()
+    fp.save(folder / "factpack.json")
+    (folder / "research.json").write_text(json.dumps({
+        "final": {"kill_fact": "Margin compression"}, "valuation": {"target_price": 100, "band_rating": "HOLD"}
+    }))
+    mgr.store.insert(id="source", status="done", out_dir=str(folder), ticker="DEMO")
+    path = "/api/workbench/source"
+    assert client.post(path + "/review").status_code == 409
+    assert client.post(path + "/refresh").is_success
+    assert client.post(path + "/review").json()["action"] == "retain"
+    starts = []
+
+    def start(ticker, demo, review):
+        starts.append(review)
+        run_id = f"child-{len(starts)}"
+        mgr.store.insert(id=run_id, status="running")
+        return run_id
+
+    monkeypatch.setattr(mgr, "start", start)
+    def assess(*args, **kwargs):
+        return FilingAssessment(action="revalue", desk="filings", reason="Changed sales", affected_inputs=["Revenue"])
+    monkeypatch.setattr(workbench.LangChainRunner, "structured", assess)
+    sc = fp.screener
+    sc["tables"]["quarters"]["rows"]["Sales"][-1] += 1
+    def save(stamp):
+        with sqlite3.connect(mgr.store.path) as conn:
+            conn.execute("INSERT INTO snapshots VALUES (?,?,?)", ("source", stamp, json.dumps(sc)))
+    save("2099-01-01")
+    update = client.post(path + "/review").json()
+    assert update["id"] == "child-1"
+    assert starts[0]["mode"] == "routine"
+    assert starts[0]["screener"] == sc
+    save("2099-01-02")
+    assert client.post(path + "/review").json() == update
+    assert len(starts) == 1
+    sc["documents"]["announcements"].append({"url": "https://example.com/filing", "title": "Auditor resignation"})
+    save("2099-01-03")
+    assert client.post(path + "/review").json()["action"] == "escalate"
+    assert starts[-1]["mode"] == "escalated"
+    assert "governance" in starts[-1]["desks"]

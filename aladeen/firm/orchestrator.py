@@ -47,6 +47,18 @@ def _short(text: str, n: int = 220) -> str:
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def evidence_revision(before: dict, after: dict, reason: str) -> dict:
+    def inputs(value):
+        used = dict(value.get("inputs") or {})
+        model = {**(used.pop("dcf", None) or {}), **(used.pop("bank", None) or {})}
+        return {**used, **model, **(value.get("capital") or {})}
+
+    old, new = inputs(before), inputs(after)
+    return {"by": "evidence", "note": reason, "before": before["target_price"], "after": after["target_price"],
+            "fair_before": before.get("value_today"), "fair_after": after.get("value_today"),
+            "changes": {k: [old.get(k), new.get(k)] for k in sorted(old.keys() | new.keys()) if old.get(k) != new.get(k)}}
+
+
 class ResearchRun:
     def __init__(self, cfg: dict, ticker: str, as_of: date | str, *, runner: Runner | None = None,
                  events: EventLog | None = None, factpack_loader: Callable[[str, date], FactPack] | None = None,
@@ -295,7 +307,10 @@ class ResearchRun:
         s["valuation_revisions"] = []
         self.ev.message("cio", "valuation", "Value the company. Answer the key questions in your assumptions.")
         self._work("valuation", "Setting growth, margin, reinvestment and scenario assumptions")
-        v = self._run_valuation()
+        reason = self.cfg.get("review_reason")
+        if reason:
+            s["assumptions"] = (self.cfg["review_baseline"].get("inputs") or {})
+        v = self._run_valuation(challenge=reason) if reason else self._run_valuation()
         rc = v.get("reality_check") or {}
         if rc.get("flag") and self.cfg.get("reality_check_revision", True):
             note = rc["message"]
@@ -359,6 +374,12 @@ class ResearchRun:
         self._done("risk", "Risk review delivered to the CIO")
         self.ev.phase("risk", "done")
 
+    def _refresh_risk_after_revision(self) -> None:
+        s = self.state
+        s["debate_verdict"] = staff.cio_rule_on_debate(self.runner, self.cfg, s["debate_material"],
+                                                      s["debate"], self.audit_md(s["audit"]))
+        self._risk()
+
     def _decision(self) -> None:
         self.ev.phase("decision")
         s = self.state
@@ -376,6 +397,7 @@ class ResearchRun:
             s["valuation_revisions"][-1]["after"] = v["target_price"]
             self._done("valuation", "Revised valuation delivered to the CIO")
             self._set_debate_material()
+            self._refresh_risk_after_revision()
             self._work("cio", "Re-signing the decision on the revised valuation")
             final = staff.cio_decide(self.runner, self.cfg, s["debate_material"], s["debate_verdict"],
                                      s["risk_review"], self.audit_md(s["audit"]))
@@ -451,10 +473,20 @@ class ResearchRun:
             self._revise(to_revise, "council")
             for r in to_revise:
                 self._done(r.desk, "Council gap closed")
-            revised = staff.memos_md(s["memos"], tuple(r.desk for r in to_revise))
+            s["desk_review"] = review
+            for r in to_revise:
+                s["audit"][f"memo:{r.desk}"] = audit_mod.audit_text(s["memos"][r.desk], self._known())
+            if any(r.revisit_value for r in to_revise):
+                before = s["valuation"]
+                v = self._run_valuation(challenge="Reassess affected inputs using these corrected memos: "
+                                        + staff.memos_md(s["memos"], tuple(r.desk for r in to_revise)))
+                s.setdefault("valuation_revisions", []).append(
+                    evidence_revision(before, v, "; ".join(r.notes for r in to_revise)))
+            self._set_debate_material()
+            if any(r.revisit_value or r.revisit_risk for r in to_revise):
+                self._refresh_risk_after_revision()
             self._work("cio", "Re-signing the decision with the revised memos")
-            final = staff.cio_decide(self.runner, self.cfg, s["debate_material"] + "\n\n## Memos revised after "
-                                     "the council\n" + revised, s["debate_verdict"], s["risk_review"],
+            final = staff.cio_decide(self.runner, self.cfg, s["debate_material"], s["debate_verdict"], s["risk_review"],
                                      self.audit_md(s["audit"]))
             s["final"] = final.model_dump()
             self.ev.log("cio", f"Decision re-signed after the council follow-up: {final.rating}. {final.headline}")
@@ -484,6 +516,9 @@ class ResearchRun:
         s = self.state
         self._work("editor", "Typesetting the report")
         s["_runner"] = self.runner
+        if self.cfg.get("review_baseline"):
+            s.setdefault("valuation_revisions", []).append(evidence_revision(
+                self.cfg["review_baseline"], s["valuation"], self.cfg["review_reason"]))
         paths = save_outputs(s, self.cfg, self.out_dir)
         s["paths"] = {k: str(p) for k, p in paths.items()}
         if self.cfg.get("log_calls", True) and s.get("report_status", "final") == "draft":
@@ -510,9 +545,6 @@ class ResearchRun:
         t0 = time.time()
         steps = [self._data, self._mandate, self._desks, self._review, self._valuation, self._debate, self._risk,
                  self._decision, self._compliance]
-        if self.cfg.get("run_council", True):
-            steps += [self._council, self._followup]
-        steps += [self._status, self._publish]
         try:
             self._preflight()
             if self.resume and isinstance(self.runner, JournalRunner) and self.runner.restored:
@@ -520,6 +552,13 @@ class ResearchRun:
                                    "are reused, so the firm picks up where it stopped.")
             for step in steps:
                 step()
+            prior_band = (self.cfg.get("review_baseline") or {}).get("band_rating")
+            changed = prior_band and prior_band != self.state["valuation"]["band_rating"]
+            if self.cfg.get("run_council", True) or (changed and self.cfg.get("council_on_band_change")):
+                self._council()
+                self._followup()
+            self._status()
+            self._publish()
         except Exception as e:
             self.state["error"] = f"{type(e).__name__}: {e}"
             self.ev.emit("error", text=self.state["error"], detail=traceback.format_exc()[-2000:])

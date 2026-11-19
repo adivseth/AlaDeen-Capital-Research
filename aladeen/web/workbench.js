@@ -80,7 +80,7 @@ async function renderWorkbench(id, snapshot = "", compare = "") {
         watch.map((w) => [w.company, w.rating, w.kill_fact, w.latest, w.governance, w.status]),
       ) +
       "<h2>" +
-      esc(d.review ? "Review needed" : d.selected === "archive" ? "Original report" : "No changes detected") +
+      esc(d.assessment?.reason || (d.review ? "Review needed" : d.selected === "archive" ? "Original report" : "No changes detected")) +
       "</h2><p><b>Thesis invalidation condition</b> · " +
       esc(d.kill_fact || "Unavailable") +
       "</p><p>Published call · " +
@@ -230,9 +230,14 @@ async function renderWorkbench(id, snapshot = "", compare = "") {
     await api(path + "/refresh", { method: "POST" });
     await renderWorkbench(selected.id);
   });
+  $("#review").disabled = !d.dates.length || d.selected !== d.dates[0] || !!compare;
   wbAction("#review", async () => {
     const r = await api(path + "/review", { method: "POST" });
-    location.hash = "#/run/" + r.id;
+    if (r.id) location.hash = "#/run/" + r.id;
+    else {
+      await renderWorkbench(selected.id);
+      toast(r.reason, 6000);
+    }
   });
   const showPeers = () => {
     const term = $("#peerFilter").value.toLowerCase();

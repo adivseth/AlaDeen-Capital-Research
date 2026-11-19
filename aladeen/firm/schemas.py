@@ -27,6 +27,15 @@ class MemoReview(BaseModel):
     desk: DeskId
     verdict: Literal["accept", "revise"]
     notes: str = Field(..., description="Why accepted, or exactly what must be fixed")
+    revisit_value: bool = Field(default=True, description="Could this correction change a valuation assumption?")
+    revisit_risk: bool = Field(default=True, description="Could this correction change the thesis or risk assessment?")
+
+
+class FilingAssessment(BaseModel):
+    action: Literal["retain", "revalue", "escalate"]
+    desk: DeskId
+    reason: str = Field(description="Identify the specific disclosure and explain its impact on the signed thesis.")
+    affected_inputs: list[str] = Field(description="Forecast assumptions or risk factors affected by this evidence.")
 
 
 class DeskReviewSet(BaseModel):

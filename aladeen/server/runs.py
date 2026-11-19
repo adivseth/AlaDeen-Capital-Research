@@ -84,6 +84,14 @@ class RunManager:
             if context.exists():
                 review = json.loads(context.read_text(encoding="utf8"))
                 cfg["desks"] = review["desks"]
+                if review.get("screener"):
+                    cfg["review_screener"] = review["screener"]
+                if review.get("prior_value"):
+                    cfg["review_baseline"] = review["prior_value"]
+                    cfg["review_reason"] = review["reason"]
+                if review.get("mode") == "routine":
+                    cfg["council_on_band_change"] = cfg.get("run_council", True)
+                    cfg.update(run_council=False, max_debate_rounds=0)
                 cfg["research_brief"] += "\nReview the prior thesis against the updated filings. Prior report: " + review["thesis"]
             state = ResearchRun(cfg, ticker, day, events=ev, out_dir=out_dir, resume=resume, **kw).run()
             f, v = state["final"], state["valuation"]
