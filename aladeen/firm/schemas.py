@@ -180,3 +180,16 @@ class CouncilVerdict(BaseModel):
         "Contradictory facts that remain unsupported by primary documentation and could change the call. "
         "Identify claims, sources and the primary evidence required."))
     report_complete: bool
+
+
+# ------------------------------------------------------------------ the conflict register
+class ConflictMatch(BaseModel):
+    index: int = Field(..., description="Index of the new conflict in the list")
+    same_as_ruling: str | None = Field(None, description="Id of the owner's ruling that already settles this point")
+    duplicate_of: int | None = Field(None, description="Index of an earlier new conflict that raises the same point")
+
+
+class ConflictMatches(BaseModel):
+    """Which newly raised conflicts repeat a point already ruled on or already raised."""
+
+    matches: list[ConflictMatch] = Field(default_factory=list)

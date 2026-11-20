@@ -116,6 +116,8 @@ Before finalising, assess whether complete and accurate research has been done. 
     # A decision-changing conflict pauses the research until the owner rules on it (dashboard or `aladeen resolve`).
     # Off: the desk work is published as a draft at once and the call is not logged.
     "hold_for_owner": True,
+    # Rulings on a company are reused by its next research for this many days (0: every research asks afresh).
+    "carry_rulings_days": 90,
     "reality_check_revision": True,  # a target far from price and consensus goes back to the analyst once
     "cio_valuation_challenge": True,  # the CIO may dispute the valuation once before signing
     # Call IDs continue from this number when the local log is behind a shared sheet (e.g. 24 -> AC-025).
@@ -135,6 +137,7 @@ EDITABLE = [
     "terminal_growth_cap", "dcf_weight", "scenario_probabilities", "scenario_multiple_factors",
     "margin_of_safety", "rating_bands", "firm_name", "analyst_name", "port", "open_browser",
     "research_brief", "council_followup", "council_recheck", "block_incomplete_reports", "hold_for_owner",
+    "carry_rulings_days",
     "reality_check_revision",
     "cio_valuation_challenge", "call_id_floor", "filings_chars_per_document", "max_presentations",
     "max_announcements_read", "web_results", "web_text_chars",

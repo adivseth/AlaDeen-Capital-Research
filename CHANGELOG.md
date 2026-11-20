@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **A conflict is asked once.** A conflict that repeats an earlier ruling in new words (at the follow-up, at
+  the council, or in the company's next research) is settled by that ruling. Duplicates in one pause are merged.
+  Rulings carry over to the same company's research for `carry_rulings_days` (default 90), including rulings
+  saved in earlier run folders. The Blume-adjusted beta is now labelled as derived from the regression beta, so
+  it is no longer flagged as an undocumented second input. Desk revisions take one snapshot of the peer memos,
+  so a resumed research always replays them exactly.
 - **Conflicting evidence pauses the research for your ruling.** A decision-changing conflict (vendor revenue or PAT
   the filings cannot settle, or contradictory claims raised by the CIO or the council) no longer skips straight to a
   draft. The run pauses with the new status *Needs your ruling*; the run page lists each conflict with a form (pick or

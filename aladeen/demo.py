@@ -18,6 +18,7 @@ from aladeen.dataflows.factpack import FactPack
 from aladeen.dataflows.logo import monogram_svg
 from aladeen.firm.schemas import (
     Catalyst,
+    ConflictMatches,
     CouncilVerdict,
     DebateVerdict,
     DeskReviewSet,
@@ -251,6 +252,8 @@ def demo_responder(name: str, schema, system: str, user: str):
                               recommendation="Run a real ticker with an API key.", verdict="WAIT",
                               one_thing_first="Add an API key in Settings and research a real company.",
                               gaps_in_report=["All data is synthetic."], report_complete=False)
+    if schema is ConflictMatches:  # the demo treats every conflict as new
+        return ConflictMatches()
     raise ValueError(f"No demo response for {name} / {schema}")
 
 

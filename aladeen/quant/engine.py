@@ -56,14 +56,21 @@ def market_snapshot(fp: FactPack, st: dict, tech: dict, cfg: dict) -> dict[str, 
 
     beta_raw = tech.get("beta_2y_weekly")
     beta_used = beta_raw
+    beta_method = "regression beta used as is"
     if beta_raw is None:
         beta_used = 1.0
+        beta_method = "no regression beta available; 1.0 used"
         notes.append("Beta unavailable: 1.0 used.")
     else:
         if cfg.get("blume_adjust_beta", True):  # Blume: 0.67 x raw + 0.33 x 1.0 (mean reversion)
             beta_used = 0.67 * beta_raw + 0.33
         beta_used = min(max(beta_used, 0.5), 2.0)
         if abs(beta_used - beta_raw) > 1e-9:
+            beta_method = ("derived from the regression beta, not a second source: "
+                           + (f"Blume adjustment 0.67 x {beta_raw:.2f} + 0.33" if cfg.get("blume_adjust_beta", True)
+                              else f"regression beta {beta_raw:.2f}")
+                           + (", bounded to 0.5-2.0" if beta_used in (0.5, 2.0) else "")
+                           + f" = {beta_used:.2f} (house method)")
             notes.append(f"Regression beta {beta_raw:.2f} adjusted to {beta_used:.2f}"
                          f"{' (Blume)' if cfg.get('blume_adjust_beta', True) else ''}"
                          f"{', bounded to 0.5-2.0' if beta_used in (0.5, 2.0) else ''}.")
@@ -83,7 +90,7 @@ def market_snapshot(fp: FactPack, st: dict, tech: dict, cfg: dict) -> dict[str, 
     return {
         "cmp": cmp_, "shares_cr": shares, "market_cap_cr": mcap, "debt_cr": debt, "cash_cr": cash,
         "net_debt_cr": net_debt, "minority_cr": minority, "current_ratio": current_ratio,
-        "ncav_per_share": ncav, "beta_raw": beta_raw, "beta": beta_used,
+        "ncav_per_share": ncav, "beta_raw": beta_raw, "beta": beta_used, "beta_method": beta_method,
         "cost_of_debt_pre_tax": kd, "debt_to_capital": d_v, "dividend_yield": div_yield,
         "pe_screener": tr.get("Stock P/E"), "book_value_screener": tr.get("Book Value"),
         "roe_screener": tr.get("ROE"), "roce_screener": tr.get("ROCE"),

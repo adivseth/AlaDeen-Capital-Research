@@ -59,6 +59,10 @@ dashboard draws the office from them; finished runs replay from `events.json`.
    owner figures into `FactPack.owner_facts` (status `owner` in `fact_resolutions`) and passes `staff.rulings_md`
    to the valuation analyst, the debate material and the council summary. Without rulings those prompts are
    unchanged, so earlier journals still replay.
+   Before holding, `_drop_repeats` asks a quick-tier clerk (`staff.match_conflicts`) whether each new conflict
+   repeats a ruling or an earlier conflict in the list. Rulings come from this run, the company register
+   (`<home>/rulings/<symbol>.json`, written by `RunManager.resolve`) and earlier run folders
+   (`carried_rulings`).
 
 ## Extending
 

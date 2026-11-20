@@ -397,7 +397,8 @@ function showHold(rec) {
   const num = (v) => (v == null ? "—" : Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
   const by = { cio: "Raised by the CIO", council: "Raised by the independent council" };
   const card = (q, i) => {
-    const head = `<div class="qn">Conflict ${i + 1} of ${hold.questions.length} · ${q.kind === "data" ? "Annual figure" : esc(by[q.raised_by] || "Evidence")}</div><p class="qt">${esc(q.text)}</p>`;
+    const also = (q.also || []).length ? `<details class="qalso"><summary>Also raised in other words (${q.also.length}) — one ruling covers all</summary><ul>${q.also.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>` : "";
+    const head = `<div class="qn">Conflict ${i + 1} of ${hold.questions.length} · ${q.kind === "data" ? "Annual figure" : esc(by[q.raised_by] || "Evidence")}</div><p class="qt">${esc(q.text)}</p>${also}`;
     if (q.kind === "data") {
       const picks = Object.entries(q.feeds || {}).map(([k, v]) => `<button type="button" class="btn sm" data-pick="${esc(v)}" data-src="${esc(k)}">Use ${esc(k)} · ${num(v)}</button>`)
         .concat((q.evidence || []).filter((e) => e.value != null).map((e) => `<button type="button" class="btn sm" data-pick="${esc(e.value)}" data-src="${esc((e.title || "Filing") + (e.page ? ", p." + e.page : ""))}">Use filing · ${num(e.value)}</button>`)).join("");

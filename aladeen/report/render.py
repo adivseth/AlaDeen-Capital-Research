@@ -310,7 +310,8 @@ def transcript_md(state: dict) -> str:
         out += ["## The firm owner's rulings on conflicting evidence"]
         for r in state["owner_rulings"]:
             fig = f" Figure: {r['value']:g} {r.get('unit') or ''}".rstrip() if r.get("value") is not None else ""
-            out += [f"- **{r['question']}** — {r.get('ruling') or 'Figure set by the owner.'}{fig}"]
+            src = f" _(from your ruling in research {r['run']})_" if r.get("carried") else ""
+            out += [f"- **{r['question']}** — {r.get('ruling') or 'Figure set by the owner.'}{fig}{src}"]
         out += [""]
     held = state.get("held")
     if held:

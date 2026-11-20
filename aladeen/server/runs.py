@@ -12,7 +12,7 @@ from pathlib import Path
 from aladeen.config import load_config
 from aladeen.dataflows.symbols import normalize, safe_component
 from aladeen.firm.events import EventLog
-from aladeen.firm.orchestrator import ResearchRun, record_rulings
+from aladeen.firm.orchestrator import ResearchRun, record_rulings, remember_rulings
 from aladeen.server.store import Store
 
 
@@ -75,7 +75,9 @@ class RunManager:
                 raise KeyError(run_id)
             if rec["status"] != "awaiting":
                 raise ValueError("This research is not waiting for your ruling")
-            record_rulings(rec["out_dir"], rulings, publish_draft=publish_draft)  # ValueError: nothing changes
+            saved = record_rulings(rec["out_dir"], rulings, publish_draft=publish_draft)  # ValueError: no change
+            if not rec["demo"]:
+                remember_rulings(self.config(), rec["ticker"], saved.get("rulings", {}), run_id, rec["as_of"])
             self.store.update(run_id, status="running", error=None, finished_at=None, seconds=None, headline=None)
             ev = EventLog()
             self.live[run_id] = ev

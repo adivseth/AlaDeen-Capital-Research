@@ -175,3 +175,140 @@ def test_dashboard_pause_and_resolve(tmp_path, monkeypatch):
     assert rec["status"] == "done" and rec["rating"] and rec["target_price"]
     assert rec["research"]["owner_rulings"][0]["ruling"] == "Revised deck wins."
     assert client.post(f"/api/runs/{run_id}/resolve", json={"rulings": {}}).status_code == 409
+
+
+BETA = "Market sensitivity: the snapshot beta is 0.58 from two years of weekly data; a separate input is 0.72."
+BETA_AGAIN = "Cost of equity: beta input 0.72 has no documented basis versus the regression's 0.58."
+PHASE3 = "Fuel-cell Phase 3 commissioning: the August call and the revised deck give different quarters."
+
+
+def clerk(user):
+    """A stand-in for the conflict clerk: the same point is the one that mentions beta."""
+    import re
+
+    from aladeen.firm.schemas import ConflictMatch, ConflictMatches
+
+    ruled = re.findall(r"^- id (q-\w+): (.*)$", user, re.M)
+    new = re.findall(r"^(\d+)\. (.*)$", user.split("## New conflicts", 1)[1], re.M)
+    out, first_beta = [], None
+    for i, text in new:
+        i = int(i)
+        same = next((rid for rid, q in ruled if "beta" in q.lower() and "beta" in text.lower()), None)
+        dup = first_beta if same is None and "beta" in text.lower() and first_beta is not None else None
+        if "beta" in text.lower() and first_beta is None:
+            first_beta = i
+        out.append(ConflictMatch(index=i, same_as_ruling=same, duplicate_of=dup))
+    return ConflictMatches(matches=out)
+
+
+def test_a_ruled_point_reworded_later_is_not_asked_again(cfg, tmp_path):
+    from aladeen.firm.schemas import ConflictMatches, CouncilVerdict
+
+    def responder(name, schema, system, user):
+        if schema is ConflictMatches:
+            return clerk(user)
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            out.unresolved_material_conflicts = [BETA]
+        if schema is CouncilVerdict:  # the council ignores the instruction and raises beta again, reworded
+            out.report_complete, out.gaps_in_report = True, []
+            out.unresolved_material_conflicts = [BETA_AGAIN]
+        return out
+
+    cfg.update(run_council=True, council_followup=False)
+    state = run(cfg, tmp_path, OfflineRunner(responder))
+    [q] = state["held"]["questions"]
+    record_rulings(tmp_path, {q["id"]: {"ruling": "0.72 is the Blume adjustment of 0.58; use 0.72."}})
+    ev = EventLog()
+    state = run(cfg, tmp_path, OfflineRunner(responder), resume=True, events=ev)
+    assert "held" not in state and state["report_status"] == "final" and state["final"]["rating"]
+    assert any("Already ruled by the firm owner" in e.get("text", "") for e in ev.all())
+
+
+def test_one_point_raised_twice_is_one_question(cfg, tmp_path):
+    from aladeen.firm.schemas import ConflictMatches
+
+    def responder(name, schema, system, user):
+        if schema is ConflictMatches:
+            return clerk(user)
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            out.unresolved_material_conflicts = [BETA, PHASE3, BETA_AGAIN, BETA]
+        return out
+
+    cfg.update(run_council=False)
+    state = run(cfg, tmp_path, OfflineRunner(responder))
+    qs = state["held"]["questions"]
+    assert [q["text"] for q in qs] == [BETA, PHASE3]
+    assert qs[0]["also"] == [BETA_AGAIN]
+
+
+def test_a_failed_repeat_check_still_asks_the_owner(cfg, tmp_path):
+    from aladeen.firm.schemas import ConflictMatches
+
+    def responder(name, schema, system, user):
+        if schema is ConflictMatches:
+            raise RuntimeError("model unavailable")
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            out.unresolved_material_conflicts = [BETA, PHASE3]
+        return out
+
+    cfg.update(run_council=False)
+    state = run(cfg, tmp_path, OfflineRunner(responder))
+    assert len(state["held"]["questions"]) == 2
+    assert any("Repeat check" in e for e in state["errors"])
+
+
+def test_the_beta_adjustment_is_explained_to_the_agents(cfg):
+    from aladeen.firm import context as cx
+    from aladeen.quant.engine import compute_quant
+
+    q = compute_quant(synthetic_factpack(), cfg, with_charts=False)
+    md = cx.market_md(q)
+    raw = q["market"]["beta_raw"]
+    assert f"Blume adjustment 0.67 x {raw:.2f} + 0.33" in md and "not a second source" in md
+
+
+def test_a_ruling_carries_to_the_next_research_on_the_company(cfg, tmp_path):
+    from aladeen.firm.orchestrator import carried_rulings, remember_rulings
+    from aladeen.firm.schemas import ConflictMatches
+
+    def responder(name, schema, system, user):
+        if schema is ConflictMatches:
+            return clerk(user)
+        out = demo_responder(name, schema, system, user)
+        if schema is DeskReviewSet:
+            out.unresolved_material_conflicts = [BETA_AGAIN]  # the next research words it differently
+        return out
+
+    first = tmp_path / "first"
+    cfg.update(run_council=False)
+    run(cfg, first, Recorder(conflict=BETA))
+    saved = record_rulings(first, {open_questions(first)["questions"][0]["id"]: {"ruling": "Use the Blume 0.72."}})
+    remember_rulings(cfg, "DEMO", saved["rulings"], "run-1", DEMO_DATE)
+
+    second = tmp_path / "second"
+    state = run(cfg, second, OfflineRunner(responder))
+    assert "held" not in state and state["report_status"] == "final"
+    assert state["owner_rulings"][0]["carried"] and state["owner_rulings"][0]["run"] == "run-1"
+    assert "from your ruling in research run-1" in (second / "report.html").read_text()
+
+    cfg["carry_rulings_days"] = 0
+    assert not carried_rulings(cfg, "DEMO", DEMO_DATE)
+    cfg["carry_rulings_days"] = 90
+    assert not carried_rulings(cfg, "DEMO", "2020-01-01")  # a backdated research cannot use a later ruling
+
+
+def test_rulings_given_before_the_register_still_count(cfg, tmp_path):
+    from pathlib import Path
+
+    from aladeen.firm.orchestrator import carried_rulings
+
+    old = Path(cfg["results_dir"]) / "20261120-164109-DEMO-167f"
+    cfg.update(run_council=False)
+    run(cfg, old, Recorder(conflict=BETA))
+    q = open_questions(old)["questions"][0]
+    record_rulings(old, {q["id"]: {"ruling": "Blume 0.72 is right."}})  # saved in the run folder only
+    carried = carried_rulings(cfg, "DEMO", DEMO_DATE)
+    assert carried[q["id"]]["ruling"] == "Blume 0.72 is right." and carried[q["id"]]["run"] == old.name

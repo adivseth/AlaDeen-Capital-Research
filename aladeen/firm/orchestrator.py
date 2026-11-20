@@ -24,6 +24,7 @@ Every step is announced on an EventLog so the dashboard can show the office at w
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import time
@@ -37,7 +38,7 @@ from typing import Any
 from aladeen.calllog import store as calllog
 from aladeen.dataflows.authority import owner_key
 from aladeen.dataflows.factpack import FactPack, build_factpack
-from aladeen.dataflows.symbols import normalize
+from aladeen.dataflows.symbols import normalize, safe_component
 from aladeen.firm import context as cx
 from aladeen.firm import staff
 from aladeen.firm.events import EventLog
@@ -124,6 +125,57 @@ def record_rulings(out_dir: str | Path, answers: dict[str, dict], publish_draft:
     saved["publish_draft"] = bool(publish_draft)
     p.write_text(json.dumps(saved, indent=2), encoding="utf-8")
     return saved
+
+
+def _register_path(cfg: dict, ticker: str) -> Path:
+    try:
+        key = normalize(ticker).yahoo
+    except ValueError:
+        key = ticker.upper()
+    return Path(cfg["home_dir"]) / "rulings" / f"{safe_component(key)}.json"
+
+
+def remember_rulings(cfg: dict, ticker: str, rulings: dict, run_id: str, as_of: date | str) -> None:
+    """Keep the owner's rulings for the company, so the next research on it does not ask the same thing again."""
+    as_of = as_of.isoformat() if isinstance(as_of, date) else as_of
+    p = _register_path(cfg, ticker)
+    reg = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {"rulings": {}}
+    for qid, r in rulings.items():
+        reg["rulings"][qid] = {**r, "run": run_id, "as_of": as_of}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(reg, indent=2), encoding="utf-8")
+
+
+def carried_rulings(cfg: dict, ticker: str, as_of: date | str) -> dict:
+    """Rulings from earlier research on the company within ``carry_rulings_days`` of this one. A ruling made for a
+    later analysis date is not used: a research as of a past date sees only what the owner had settled by then."""
+    days = int(cfg.get("carry_rulings_days", 90) or 0)
+    if days <= 0:
+        return {}
+    reg = _earlier_run_rulings(cfg, ticker)
+    p = _register_path(cfg, ticker)
+    with contextlib.suppress(ValueError):  # an unreadable register: the run folders still count
+        reg.update(json.loads(p.read_text(encoding="utf-8")).get("rulings", {}) if p.exists() else {})
+    now = as_of if isinstance(as_of, date) else date.fromisoformat(as_of)
+    return {k: {**r, "carried": True} for k, r in reg.items()
+            if r.get("as_of") and 0 <= (now - date.fromisoformat(r["as_of"])).days <= days}
+
+
+def _earlier_run_rulings(cfg: dict, ticker: str) -> dict:
+    """Rulings saved in the company's earlier research folders (including those from before the register)."""
+    out: dict = {}
+    root = Path(cfg.get("results_dir") or Path(cfg["home_dir"]) / "research")
+    for f in sorted(root.glob(f"*-{safe_component(ticker.upper())}-*/{RULINGS_FILE}")):
+        try:
+            saved = json.loads(f.read_text(encoding="utf-8"))
+            q = open_questions(f.parent) or {}
+        except ValueError:
+            continue
+        run_id = f.parent.name
+        as_of = q.get("as_of") or f"{run_id[:4]}-{run_id[4:6]}-{run_id[6:8]}"  # older folders: the run's date
+        for qid, r in (saved.get("rulings") or {}).items():
+            out[qid] = {**r, "run": run_id, "as_of": as_of}
+    return out
 
 
 def _short(text: str, n: int = 220) -> str:
@@ -344,13 +396,14 @@ class ResearchRun:
     def _revise(self, to_revise: list, round_label) -> None:
         """Desks rewrite their memos in parallel from the CIO's notes."""
         s = self.state
+        peers = dict(s["memos"])  # taken once: a replayed revision must see exactly what the first attempt saw
 
         def redo(r):
             self.ev.message("cio", r.desk, "Please revise: " + _short(r.notes, 200))
             self._work(r.desk, "Revising memo: " + _short(r.notes, 120))
             text, material = staff.write_memo(r.desk, self.runner, self.cfg, s["fp"], s["quant"],
                                               s["mandate"], revision_notes=r.notes, previous=s["memos"][r.desk],
-                                              peer_memos=dict(s["memos"]))
+                                              peer_memos=peers)
             self.ev.log(r.desk, "Revised memo submitted", _short(text, 900))
             self.ev.agent(r.desk, "waiting", "Revised memo with the CIO")
             return r, text, material
@@ -638,7 +691,7 @@ class ResearchRun:
         from this hold or an earlier one, is given to the agents from the valuation onward as a settled fact. With
         nothing ruled the agents' questions are unchanged, so a resumed research replays its saved answers."""
         s, saved = self.state, self._load_rulings()
-        rulings = saved.get("rulings") or {}
+        rulings = {**carried_rulings(self.cfg, self.ticker, s["as_of"]), **(saved.get("rulings") or {})}
         fp = s["fp"]
         figures = {}
         for record in s["quant"]["valuation_blockers"]:
@@ -653,9 +706,10 @@ class ResearchRun:
                 f"{k.replace('|', ' ')} = {v['value']:g}" for k, v in figures.items()))
         s["owner_rulings"] = [{"id": k, **r} for k, r in rulings.items()]
         s["rulings_md"] = staff.rulings_md(s["owner_rulings"])
+        conflicts = list(dict.fromkeys(c.strip() for c in conflicts if c and c.strip()))
         questions = [data_question(r) for r in s["quant"]["valuation_blockers"]]
         questions += [conflict_question(c, raised_by) for c in conflicts]
-        open_ = [q for q in questions if q["id"] not in rulings]
+        open_ = self._drop_repeats([q for q in questions if q["id"] not in rulings], rulings)
         settled = len(questions) - len(open_)
         if settled:
             self.ev.log("cio", f"{settled} conflict(s) settled by the firm owner; the research continues on those rulings.")
@@ -663,13 +717,40 @@ class ResearchRun:
         if open_ and self.out_dir and self.cfg.get("hold_for_owner", True) and not saved.get("publish_draft"):
             raise OwnerHold(stage, open_)
 
+    def _drop_repeats(self, open_: list[dict], rulings: dict) -> list[dict]:
+        """Agents at different stages flag the same point in their own words. A conflict that repeats one the owner
+        has already ruled on is settled by that ruling; one that repeats an earlier conflict in the same list is
+        merged into it. Nothing is asked when there is nothing to compare."""
+        new = [q for q in open_ if q["kind"] == "conflict"]
+        if not new or (not rulings and len(new) < 2):
+            return open_
+        ruled = [{"id": k, **r} for k, r in rulings.items()]
+        try:
+            matches = staff.match_conflicts(self.runner, self.cfg, [q["text"] for q in new], ruled)
+        except Exception as e:  # noqa: BLE001 - when the check fails, ask the owner rather than guess
+            self.state["errors"].append(f"Repeat check on conflicts failed: {e}")
+            return open_
+        drop = set()
+        for q, m in zip(new, matches, strict=True):
+            if m["same_as"]:
+                drop.add(q["id"])
+                self.ev.log("cio", "Already ruled by the firm owner (same point, new wording): " + _short(q["text"], 200),
+                            "Ruling applied: " + (rulings[m["same_as"]].get("ruling") or rulings[m["same_as"]]["question"]))
+            elif m["duplicate_of"] is not None:
+                drop.add(q["id"])
+                new[m["duplicate_of"]].setdefault("also", []).append(q["text"])
+        if drop:
+            self.state.setdefault("repeats_dropped", 0)
+            self.state["repeats_dropped"] += len(drop)
+        return [q for q in open_ if q["id"] not in drop]
+
     def _hold(self, h: OwnerHold) -> None:
         """Save the open questions and stop. The research resumes when the owner has ruled on every one."""
         s = self.state
         review = s.get("desk_review")
         s["held"] = {"stage": h.stage, "questions": h.questions}
         self._save_json(QUESTIONS_FILE, {
-            "stage": h.stage, "asked_at": time.time(), "questions": h.questions,
+            "stage": h.stage, "asked_at": time.time(), "as_of": s["as_of"], "questions": h.questions,
             "synthesis": getattr(review, "synthesis", ""), "memos": s.get("memos", {})})
         try:  # the working papers so far, so the owner can read the desk work behind each conflict
             from aladeen.report.render import transcript_md

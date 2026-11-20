@@ -86,7 +86,8 @@ def market_md(q: dict) -> str:
         f"- Debt: {fmt(m['debt_cr'], 'cr')} | Cash & ST investments: {fmt(m['cash_cr'], 'cr')} | "
         f"Net debt: {fmt(m['net_debt_cr'], 'cr')} | Minority interest: {fmt(m['minority_cr'], 'cr')}",
         f"- Current ratio: {fmt(m['current_ratio'], nd=2)} | NCAV/share: {fmt(m['ncav_per_share'], 'inr')}",
-        f"- Beta (2Y weekly vs benchmark): {fmt(m['beta_raw'], nd=2)} (used: {fmt(m['beta'], nd=2)})",
+        f"- Beta (2Y weekly vs benchmark): {fmt(m['beta_raw'], nd=2)}; used in the cost of equity: "
+        f"{fmt(m['beta'], nd=2)} ({m.get('beta_method') or 'house method'})",
         f"- TTM EPS: {fmt(q.get('eps_ttm'), 'inr', 2)} | TTM PAT: {fmt(ttm.get('PAT'), 'cr')} "
         f"| TTM revenue: {fmt(ttm.get('Revenue'), 'cr')}",
         f"- 1Y return: {fmt(t.get('returns', {}).get('1Y'), 'pct')} vs benchmark "

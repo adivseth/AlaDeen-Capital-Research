@@ -392,3 +392,5 @@ table.t th.num,table.t td.num{text-align:right;font-family:var(--mono);font-vari
 #holdmsg{color:var(--sell)}
 .wire li.hold{border-left-color:var(--gold);background:var(--hold-bg)} .wire li.hold .who{color:var(--gold)}
 @media (max-width:720px){.hold-head{flex-direction:column}.q .row2{grid-template-columns:1fr}}
+.q .qalso{margin:-4px 0 12px;font-size:13px;color:var(--tx2)} .q .qalso summary{cursor:pointer;color:var(--mut)}
+.q .qalso ul{margin:6px 0 0;padding-left:18px}

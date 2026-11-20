@@ -305,6 +305,8 @@ def _ask_rulings(hold: dict) -> tuple[dict, bool]:
     rulings: dict[str, dict] = {}
     for i, q in enumerate(questions, 1):
         console.print(f"[bold #b7791f]{i}. {q['text']}[/]")
+        for t in q.get("also") or []:
+            console.print(f"   [dim]Also raised as: {t}[/]")
         if q["kind"] == "data":
             feeds = ", ".join(f"{k} {v:g}" for k, v in (q.get("feeds") or {}).items())
             console.print(f"   Vendor readings ({q['unit']}): {feeds or 'none'}")

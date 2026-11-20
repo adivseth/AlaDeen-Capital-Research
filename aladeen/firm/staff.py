@@ -12,6 +12,7 @@ from aladeen.firm import context as cx
 from aladeen.firm.prompts import COUNCIL_ADVISORS, system_for
 from aladeen.firm.roster import TITLES
 from aladeen.firm.schemas import (
+    ConflictMatches,
     CouncilVerdict,
     DebateVerdict,
     DeskReviewSet,
@@ -119,11 +120,41 @@ def rulings_md(rulings: list[dict]) -> str:
         return ""
     lines = ["## The firm owner's rulings on conflicting evidence",
              "The research was paused on these conflicts and the firm owner settled them. Treat each ruling as the "
-             "settled fact; do not reopen it. Where a desk memo says otherwise, the ruling prevails."]
+             "settled fact; do not reopen it. Where a desk memo says otherwise, the ruling prevails. Do not list "
+             "any of these again as an unresolved conflict, in any wording or from any other source."]
     for r in rulings:
         value = f" Figure to use: {r['value']:g} {r.get('unit') or ''}.".rstrip() if r.get("value") is not None else ""
         lines.append(f"- Conflict: {r['question']}\n  Ruling: {r.get('ruling') or 'Use the figure below.'}{value}")
     return "\n".join(lines)
+
+
+CONFLICT_CLERK = """You keep the register of evidence conflicts for an equity research firm. Agents at different
+stages flag conflicts in their own words, so the same point can come back reworded or citing other sources. For each
+NEW conflict, decide:
+- same_as_ruling: the id of a conflict the firm owner has ALREADY RULED ON that disputes the same underlying fact,
+  figure or claim (same metric, period, event or input), however it is worded. The ruling settles it.
+- duplicate_of: the index of an EARLIER new conflict in the list that raises the same point.
+A conflict about a different metric, period, event or claim is new, even when it is related. When unsure, treat it as
+new (null): it is better to ask the owner twice than to drop a real conflict. Return one entry per new conflict."""
+
+
+def match_conflicts(runner: Runner, cfg: dict, conflicts: list[str], rulings: list[dict]) -> list[dict]:
+    """For each new conflict: the ruling that already settles it, or the earlier new conflict it repeats."""
+    ruled = "\n".join(f"- id {r['id']}: {r['question']} | Ruling: {r.get('ruling') or ''}"
+                      + (f" | Figure: {r['value']:g}" if r.get("value") is not None else "") for r in rulings)
+    new = "\n".join(f"{i}. {c}" for i, c in enumerate(conflicts))
+    user = f"## Conflicts the owner has already ruled on\n{ruled or '_none_'}\n\n## New conflicts\n{new}"
+    out = runner.structured(CONFLICT_CLERK, user, ConflictMatches, tier="quick", name="conflict_match")
+    ids = {r["id"] for r in rulings}
+    result = [{"same_as": None, "duplicate_of": None} for _ in conflicts]
+    for m in out.matches:
+        if not 0 <= m.index < len(conflicts):
+            continue
+        if m.same_as_ruling in ids:
+            result[m.index]["same_as"] = m.same_as_ruling
+        elif m.duplicate_of is not None and 0 <= m.duplicate_of < m.index:
+            result[m.index]["duplicate_of"] = m.duplicate_of
+    return result
 
 
 def cio_mandate(runner: Runner, cfg: dict, fp: FactPack, q: dict, prior_md: str) -> ResearchMandate:
@@ -200,7 +231,8 @@ def cost_of_capital_md(q: dict, cfg: dict) -> str:
     rf, ds = cfg["risk_free_rate"], cfg.get("country_default_spread", 0.0)
     return (f"## Cost of capital inputs\nG-Sec {rf:.2%} less sovereign default spread {ds:.2%} = riskless "
             f"{rf - ds:.2%}; ERP {cfg['equity_risk_premium']:.2%} (total, includes country risk); beta "
-            f"{m['beta']:.2f} (regression {m['beta_raw'] if m['beta_raw'] is None else round(m['beta_raw'], 2)}); "
+            f"{m['beta']:.2f} (regression {m['beta_raw'] if m['beta_raw'] is None else round(m['beta_raw'], 2)}; "
+            f"{m.get('beta_method') or 'house method'}); "
             f"tax {cfg['tax_rate']:.2%}; terminal growth cap {cfg['terminal_growth_cap']:.2%}. Sector treatment: "
             f"{'financial (residual income on book value)' if q['is_financial'] else 'FCFF DCF'}.")
 
