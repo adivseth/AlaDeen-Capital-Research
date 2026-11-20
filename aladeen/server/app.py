@@ -70,6 +70,15 @@ def create_app(home_dir: str | None = None) -> FastAPI:
     app.state.mgr = mgr
     app.include_router(workbench_router(mgr))
 
+    @app.middleware("http")
+    async def revalidate_pages(request, call_next):
+        """The dashboard has no build step, so an update changes app.js in place. Without this a browser keeps
+        running the old script from its cache. ``no-cache`` still uses the cache, but checks the file first."""
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     # ------------------------------------------------------------------ pages
     @app.get("/", response_class=HTMLResponse)
     def index():

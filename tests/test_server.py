@@ -45,8 +45,11 @@ def test_shell_and_static(client):
     assert client.get("/api/health").json()["app"] == "AlaDeen Capital Research"
     page = client.get("/")
     assert page.status_code == 200 and "/static/app.js" in page.text
+    assert page.headers["cache-control"] == "no-cache"
     for f in ("app.js", "app.css"):
-        assert client.get(f"/static/{f}").status_code == 200
+        r = client.get(f"/static/{f}")
+        assert r.status_code == 200 and r.headers["cache-control"] == "no-cache"  # an update reaches the browser
+        assert client.get(f"/static/{f}", headers={"If-None-Match": r.headers["etag"]}).status_code == 304
     r = client.get("/api/roster").json()
     assert {a["id"] for a in r["agents"]} >= {"cio", "valuation", "bull", "bear", "risk", "council", "editor"}
     assert all(a["room"] in {x["id"] for x in r["rooms"]} for a in r["agents"])
