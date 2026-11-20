@@ -171,6 +171,10 @@ def create_app(home_dir: str | None = None) -> FastAPI:
         rec = _rec(run_id)
         p = Path(rec["out_dir"]) / "research.json"
         rec["research"] = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+        if rec["status"] == "awaiting":
+            from aladeen.firm.orchestrator import open_questions
+
+            rec["hold"] = open_questions(rec["out_dir"])
         return rec
 
     @app.post("/api/runs/{run_id}/chat")
@@ -189,6 +193,19 @@ def create_app(home_dir: str | None = None) -> FastAPI:
             raise HTTPException(404, "Research not found") from e
         except ValueError as e:
             raise HTTPException(409, str(e)) from e
+
+    @app.post("/api/runs/{run_id}/resolve")
+    def resolve(run_id: str, payload: dict = Body(...)):
+        """The owner rules on the conflicts that paused a research; the research then continues."""
+        rulings = payload.get("rulings") or {}
+        if not isinstance(rulings, dict) or not all(isinstance(v, dict) for v in rulings.values()):
+            raise HTTPException(400, "rulings must map each question id to {ruling, value}")
+        try:
+            return {"id": mgr.resolve(run_id, rulings, publish_draft=bool(payload.get("publish_draft")))}
+        except KeyError as e:
+            raise HTTPException(404, "Research not found") from e
+        except ValueError as e:
+            raise HTTPException(409 if "not waiting" in str(e) else 400, str(e)) from e
 
     @app.get("/api/runs/{run_id}/events")
     def events(run_id: str, since: int = 0, wait: float = 10.0):

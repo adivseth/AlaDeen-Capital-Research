@@ -194,8 +194,26 @@ def resolve(fp):
     return records
 
 
+def owner_key(record) -> str:
+    """How the firm owner's ruling on an annual fact is filed: one ruling per period, scope and metric."""
+    return f"{record['period']}|{record['scope']}|{record['metric']}"
+
+
+def apply_owner_facts(records, owner_facts):
+    """The firm owner settles a fact the filings could not: the unresolved record takes the owner's figure and
+    keeps the vendor readings and evidence beside it, so the report shows both the conflict and the ruling."""
+    for record in records:
+        ruling = owner_facts.get(owner_key(record)) if owner_facts else None
+        if record["status"] == "unresolved" and ruling and ruling.get("value") is not None:
+            record.update(value=float(ruling["value"]), status="owner", owner_note=ruling.get("note") or "")
+    return records
+
+
 def summary(record):
     source = record["evidence"]
+    if record["status"] == "owner":
+        return (f"{record['period']} {record['scope']} {record['metric']}: {record['value']:g} {record['unit']} "
+                f"(set by the firm owner: {record.get('owner_note') or 'no note'})")
     detail = (
         f"{record['value']:g} {record['unit']} ({source[0]['url']}, PDF p.{source[0]['page']})"
         if record["status"] == "verified"

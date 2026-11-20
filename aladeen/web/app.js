@@ -11,7 +11,7 @@ const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString("en-IN", { dateSty
 const clock = (ts) => new Date(ts * 1000).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 // Desk codes (the three letters on every docket) and the numerals on the floor plan.
-const CODES = { cio: "CIO", data: "QNT", fundamentals: "FIN", business: "SEC", governance: "GOV", filings: "FLG", news: "INT",
+const CODES = { owner: "YOU", cio: "CIO", data: "QNT", fundamentals: "FIN", business: "SEC", governance: "GOV", filings: "FLG", news: "INT",
   technical: "TEC", valuation: "VAL", bull: "BUL", bear: "BER", risk: "CRO", compliance: "CMP", council: "CNL", editor: "EDT" };
 const code = (id) => CODES[id] || String(id || "").slice(0, 3).toUpperCase();
 const ROOM_NO = { executive: "I", floor: "II", lab: "III", debate: "IV", risk: "V", council: "VI", publishing: "VII" };
@@ -45,7 +45,7 @@ function ratingPill(r, q, size = "") {
   return `<span class="stamp ${esc(r)} ${size}">${esc(r)}${q ? " · " + esc(q) : ""}</span>`;
 }
 function statusPill(s, demo) {
-  const label = { running: "Researching", done: "Published", error: "Stopped", queued: "Queued" }[s] || s;
+  const label = { running: "Researching", done: "Published", error: "Stopped", queued: "Queued", awaiting: "Needs your ruling" }[s] || s;
   return `<span class="status ${esc(s)}"><i class="lamp"></i>${esc(label)}</span>${demo ? '<span class="tag">Demo</span>' : ""}`;
 }
 
@@ -128,7 +128,7 @@ async function renderHome() {
     <div class="kpi BUY"><span>Buy</span><b>${count("BUY")}</b><small>${share("BUY")}</small></div>
     <div class="kpi HOLD"><span>Hold</span><b>${count("HOLD")}</b><small>${share("HOLD")}</small></div>
     <div class="kpi SELL"><span>Sell</span><b>${count("SELL")}</b><small>${share("SELL")}</small></div>
-    <div class="kpi"><span>Stopped</span><b>${real.filter((r) => r.status === "error").length}</b><small>Can be continued</small></div>
+    <div class="kpi ${real.some((r) => r.status === "awaiting") ? "ask" : ""}"><span>Needs you</span><b>${real.filter((r) => r.status === "error" || r.status === "awaiting").length}</b><small>${real.filter((r) => r.status === "awaiting").length} awaiting your ruling · ${real.filter((r) => r.status === "error").length} stopped</small></div>
   </section>
   <div class="sect-head"><div><div class="kicker">Latest filings</div><h2>Recent research</h2></div><a href="#/history" class="btn ghost sm">Open the archive →</a></div>
   ${runs.length ? `<div class="ledger">${LHEAD}${runs.slice(0, 8).map(lrow).join("")}</div>` :
@@ -144,11 +144,11 @@ function lrow(r) {
   const ok = r.status === "done";
   return `<div class="lrow" data-id="${esc(r.id)}" tabindex="0" role="link">
     <div class="tk">${esc(r.ticker)}</div>
-    <div class="co"><b>${esc(r.company || r.ticker)}</b><span>as of ${esc(r.as_of)}${r.demo ? " · demo" : ""}</span>${r.status === "error" ? `<em class="why">${esc((r.error || "").slice(0, 110))}</em>` : ""}</div>
+    <div class="co"><b>${esc(r.company || r.ticker)}</b><span>as of ${esc(r.as_of)}${r.demo ? " · demo" : ""}</span>${r.status === "error" ? `<em class="why">${esc((r.error || "").slice(0, 110))}</em>` : ""}${r.status === "awaiting" ? `<em class="why ask">${esc(r.headline || "Paused for your ruling")}</em>` : ""}</div>
     <div>${ok ? ratingPill(r.rating, r.qualifier) : statusPill(r.status, r.demo)}</div>
     <div class="nm">${ok ? inr(r.target_price, 0) : "—"}</div>
     <div class="nm up ${r.upside >= 0 ? "pos" : "neg"}">${ok ? pct(r.upside) : ""}</div>
-    <div class="go">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button>` : ""}</div>
+    <div class="go">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button>` : ""}${r.status === "awaiting" ? `<a class="btn sm ask" href="#/run/${esc(r.id)}" title="Settle the conflicting evidence so the research can continue">Rule now</a>` : ""}</div>
   </div>`;
 }
 
@@ -236,6 +236,9 @@ function feedItem(e) {
   if (e.type === "error") {
     return `<li class="err">${tm}<div><div class="who">Stopped</div><div class="tx">${esc(e.text)}</div></div></li>`;
   }
+  if (e.type === "hold") {
+    return `<li class="hold">${tm}<div><div class="who">Paused for you</div><div class="tx">${esc(e.text)}</div></div></li>`;
+  }
   if (e.type === "done") {
     return `<li class="fin">${tm}<div><div class="who">Published</div><div class="tx">${esc(e.rating || "Decision pending")}${e.qualifier ? " (" + esc(e.qualifier) + ")" : ""} · target ${inr(e.target_price)} · ${pct(e.upside)} · ${esc(e.seconds)}s · ${esc(e.llm_calls)} AI calls${e.reused_calls ? ` · ${esc(e.reused_calls)} answers reused from the earlier attempt` : ""}</div></div></li>`;
   }
@@ -272,6 +275,7 @@ async function renderRun(id) {
   $$("#tabs button").forEach((b) => (b.onclick = () => showTab(b.dataset.tab, rec)));
   if (rec.status === "done") showBanner(rec);
   if (rec.status === "error") showError(rec.error, id);
+  if (rec.status === "awaiting") showHold(rec);
   followEvents(id, rec);
 }
 
@@ -381,6 +385,89 @@ function showError(msg, id = active.runId) {
   $("#retry").onclick = (ev) => retryResearch(id, ev.currentTarget);
 }
 
+// The research is paused on conflicting evidence: the owner rules on each conflict, then the firm carries on.
+function showHold(rec) {
+  const hold = rec.hold;
+  const b = $("#banner");
+  if (!hold || !hold.questions) {
+    b.innerHTML = `<div class="verdict err"><div><div class="vk">Status</div><span class="stamp lg ASK">Paused</span></div><div><div class="msg">This research is waiting for your ruling, but its questions could not be read.</div></div></div>`;
+    return;
+  }
+  const stage = { review: "values the company", followup: "re-signs the decision", council: "files the call" }[hold.stage] || "goes ahead";
+  const num = (v) => (v == null ? "—" : Number(v).toLocaleString("en-IN", { maximumFractionDigits: 2 }));
+  const by = { cio: "Raised by the CIO", council: "Raised by the independent council" };
+  const card = (q, i) => {
+    const head = `<div class="qn">Conflict ${i + 1} of ${hold.questions.length} · ${q.kind === "data" ? "Annual figure" : esc(by[q.raised_by] || "Evidence")}</div><p class="qt">${esc(q.text)}</p>`;
+    if (q.kind === "data") {
+      const picks = Object.entries(q.feeds || {}).map(([k, v]) => `<button type="button" class="btn sm" data-pick="${esc(v)}" data-src="${esc(k)}">Use ${esc(k)} · ${num(v)}</button>`)
+        .concat((q.evidence || []).filter((e) => e.value != null).map((e) => `<button type="button" class="btn sm" data-pick="${esc(e.value)}" data-src="${esc((e.title || "Filing") + (e.page ? ", p." + e.page : ""))}">Use filing · ${num(e.value)}</button>`)).join("");
+      const ev = (q.evidence || []).map((e) => `<li><a href="${esc(e.url)}${e.page ? "#page=" + esc(e.page) : ""}" target="_blank" rel="noopener">${esc(e.title || "Filing")}${e.page ? ", p." + esc(e.page) : ""}</a> · ${esc(e.line || "")}</li>`).join("");
+      return `<fieldset class="q" data-id="${esc(q.id)}" data-kind="data">${head}
+        <div class="qmeta">Vendor feeds disagree and no matching filed figure settles it. Unit: ${esc(q.unit)}.</div>
+        ${ev ? `<ul class="qev">${ev}</ul>` : ""}
+        <div class="picks">${picks}</div>
+        <div class="row2"><div class="field"><label class="f" for="v-${esc(q.id)}">Figure to use (${esc(q.unit)})</label><input id="v-${esc(q.id)}" name="value" type="number" step="any" required placeholder="e.g. 2150.5"></div>
+        <div class="field"><label class="f" for="n-${esc(q.id)}">Source</label><input id="n-${esc(q.id)}" name="note" placeholder="Document and page, e.g. FY26 annual report, p.112"></div></div>
+      </fieldset>`;
+    }
+    return `<fieldset class="q" data-id="${esc(q.id)}" data-kind="conflict">${head}
+      <div class="field"><label class="f" for="r-${esc(q.id)}">Your ruling</label><textarea id="r-${esc(q.id)}" name="ruling" rows="3" required maxlength="2000" placeholder="Which claim is right, and the document that proves it. E.g. “The revised Q2 presentation (slide 14) is correct; the concall figure was before the restatement.”"></textarea></div>
+    </fieldset>`;
+  };
+  b.innerHTML = `<div class="holdbox">
+    <div class="hold-head"><span class="stamp lg ASK">Paused</span>
+      <div><h3>The firm needs your ruling before it ${stage}.</h3>
+      <p>The research found conflicting evidence that could change the rating. Nothing has been valued or signed on it. Settle each conflict below and the firm continues from where it stopped: finished work is reused, and every agent from here on treats your ruling as settled fact.</p></div></div>
+    ${hold.synthesis ? `<details class="qctx"><summary>What the CIO has so far</summary><p>${esc(hold.synthesis)}</p><a href="#" id="seememos">Read the desk memos in Working papers →</a></details>` : ""}
+    <form id="holdform" novalidate>${hold.questions.map(card).join("")}
+      <div class="hold-acts"><button class="btn primary" type="submit" id="holdgo">Continue the research</button>
+      <button class="btn ghost" type="button" id="holddraft" title="Skip the ruling: publish the desk work as a draft, with no rating and no call logged">Publish as draft instead</button>
+      <span class="small muted" id="holdmsg"></span></div>
+    </form></div>`;
+  $$("[data-pick]", b).forEach((btn) => (btn.onclick = () => {
+    const f = btn.closest("fieldset");
+    $("[name=value]", f).value = btn.dataset.pick;
+    const note = $("[name=note]", f);
+    if (!note.value) note.value = btn.dataset.src;
+    $$("[data-pick]", f).forEach((x) => x.classList.toggle("on", x === btn));
+  }));
+  const ctx = $("#seememos");
+  if (ctx) ctx.onclick = (ev) => { ev.preventDefault(); showTab("file", rec); };
+  const send = async (draft) => {
+    const rulings = {};
+    let missing = null;
+    $$("fieldset.q", b).forEach((f) => {
+      f.classList.remove("bad");
+      if (f.dataset.kind === "data") {
+        const v = $("[name=value]", f).value.trim();
+        if (!draft && (v === "" || isNaN(Number(v)))) { missing = missing || f; f.classList.add("bad"); }
+        if (v !== "" && !isNaN(Number(v))) rulings[f.dataset.id] = { value: Number(v), ruling: $("[name=note]", f).value.trim() };
+      } else {
+        const t = $("[name=ruling]", f).value.trim();
+        if (!draft && !t) { missing = missing || f; f.classList.add("bad"); }
+        if (t) rulings[f.dataset.id] = { ruling: t };
+      }
+    });
+    if (missing) { $("#holdmsg").textContent = "Rule on every conflict first."; $("input,textarea", missing).focus(); return; }
+    $$("#holdform button").forEach((x) => (x.disabled = true));
+    try {
+      await api("/api/runs/" + encodeURIComponent(rec.id) + "/resolve", { method: "POST", body: JSON.stringify({ rulings, publish_draft: draft }) });
+      toast(draft ? "Publishing the desk work as a draft…" : "Ruling filed. The firm is continuing…");
+      await renderRun(rec.id);
+    } catch (e) {
+      $$("#holdform button").forEach((x) => (x.disabled = false));
+      $("#holdmsg").textContent = e.message;
+    }
+  };
+  $("#holdform").onsubmit = (ev) => { ev.preventDefault(); send(false); };
+  const dbtn = $("#holddraft");
+  dbtn.onclick = () => {
+    if (dbtn.dataset.sure) return send(true);
+    dbtn.dataset.sure = "1";
+    dbtn.textContent = "Click again: publish without a rating";
+  };
+}
+
 // Continue a failed research under the same id, then show it live again.
 async function retryResearch(id, btn) {
   if (btn) btn.disabled = true;
@@ -427,6 +514,7 @@ async function followEvents(id, rec) {
       if (fresh.seconds) $("#elapsed").textContent = fresh.seconds + "s";
       if (fresh.status === "done" && !$("#banner").dataset.done) { showBanner(fresh); refreshMasthead(); if (live) { toast("Report published"); showTab("report", fresh); } }
       if (fresh.status === "error") showError(fresh.error, id);
+      if (fresh.status === "awaiting") { showHold(fresh); if (live) toast("Paused: the firm needs your ruling", 4000); }
       break;
     }
   }
@@ -455,6 +543,8 @@ function apply(e, animate) {
   } else if (e.type === "error") {
     $$(".desk.working").forEach((d) => setDesk(d.id.slice(5), "error", "Stopped"));
     showError(e.text);
+  } else if (e.type === "hold") {
+    setDesk("cio", "waiting", "Waiting for your ruling");
   }
 }
 
@@ -475,7 +565,7 @@ async function renderHistory() {
       <td>${statusPill(r.status, r.demo)}</td><td>${ratingPill(r.rating, r.qualifier)}</td>
       <td class="num">${inr(r.target_price, 0)}</td><td class="num">${inr(r.cmp, 0)}</td><td class="num">${r.status === "done" ? pct(r.upside) : "—"}</td>
       <td>${esc(r.council_verdict || "—")}</td><td class="small muted">${when(r.created_at)}</td>
-      <td style="white-space:nowrap">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button> ` : ""}${r.status === "done" ? `<a class="btn sm" href="#/monitor/${esc(r.id)}">Monitor</a>` : ""}<button class="btn ghost danger sm" data-del="${esc(r.id)}" title="Delete this research">Delete</button></td></tr>`).join("");
+      <td style="white-space:nowrap">${r.status === "error" ? `<button class="btn sm" data-retry="${esc(r.id)}" title="Continue this research where it stopped">↻ Try again</button> ` : ""}${r.status === "awaiting" ? `<a class="btn sm ask" href="#/run/${esc(r.id)}">Rule now</a> ` : ""}${r.status === "done" ? `<a class="btn sm" href="#/monitor/${esc(r.id)}">Monitor</a>` : ""}<button class="btn ghost danger sm" data-del="${esc(r.id)}" title="Delete this research">Delete</button></td></tr>`).join("");
     $$("#rows tr").forEach((tr) => (tr.onclick = (ev) => { if (!ev.target.closest("[data-del],[data-retry],a")) location.hash = "#/run/" + tr.dataset.id; }));
     $$("[data-retry]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); retryResearch(b.dataset.retry, b); }));
     $$("[data-del]").forEach((b) => (b.onclick = async (ev) => {
@@ -564,7 +654,7 @@ async function renderSettings() {
     <label class="f">Research desks the CIO can brief</label><div class="desk-check" style="margin-bottom:16px">${desks}</div>
     <div class="row3"><div class="field"><label class="f">CIO revision rounds</label><input id="cio_revision_rounds" type="number" min="0" max="3" value="${v.cio_revision_rounds}"><div class="hint">How many times the CIO may send memos back.</div></div>
     <div class="field"><label class="f">Debate rebuttal rounds</label><input id="max_debate_rounds" type="number" min="0" max="4" value="${v.max_debate_rounds}"></div>
-    <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="run_council" ${v.run_council ? "checked" : ""}> Independent council review</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="council_followup" ${v.council_followup ? "checked" : ""}> Fix the council's gaps before publishing</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="log_calls" ${v.log_calls ? "checked" : ""}> Add calls to the call log</label></div></div>
+    <div class="field"><label class="f">&nbsp;</label><label class="switch"><input type="checkbox" id="run_council" ${v.run_council ? "checked" : ""}> Independent council review</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="council_followup" ${v.council_followup ? "checked" : ""}> Fix the council's gaps before publishing</label><label class="switch" style="margin-top:8px" title="Off: conflicting evidence publishes the desk work as a draft straight away"><input type="checkbox" id="hold_for_owner" ${v.hold_for_owner ? "checked" : ""}> Pause for my ruling on conflicting evidence</label><label class="switch" style="margin-top:8px"><input type="checkbox" id="log_calls" ${v.log_calls ? "checked" : ""}> Add calls to the call log</label></div></div>
   </section>
   <section class="card" id="s-data">${sec(5, "Data")}
     <div class="row3"><div class="field"><label class="switch"><input type="checkbox" id="fetch_documents" ${v.fetch_documents ? "checked" : ""}> Read annual reports &amp; concall transcripts</label></div>
@@ -634,7 +724,7 @@ async function renderSettings() {
       desks: $$("[data-desk]").filter((c) => c.checked).map((c) => c.dataset.desk),
       cio_revision_rounds: num("cio_revision_rounds"), max_debate_rounds: num("max_debate_rounds"),
       run_council: $("#run_council").checked, log_calls: $("#log_calls").checked,
-      council_followup: $("#council_followup").checked, research_brief: $("#research_brief").value,
+      council_followup: $("#council_followup").checked, hold_for_owner: $("#hold_for_owner").checked, research_brief: $("#research_brief").value,
       fetch_documents: $("#fetch_documents").checked, document_mode: $("#document_mode").value,
       news_lookback_days: num("news_lookback_days"), max_annual_reports: num("max_annual_reports"), max_concall_transcripts: num("max_concall_transcripts"),
       firm_name: $("#firm_name").value, analyst_name: $("#analyst_name").value, port: num("port"), open_browser: $("#open_browser").checked,

@@ -14,11 +14,17 @@
       the council checks again; a report it still finds incomplete is published as a draft, unlogged
     → Publishing Editor typesets and files the report
 
+A decision-changing conflict (a vendor figure the filings cannot settle, or contradictory claims the CIO or the
+council flags) holds the research for the firm owner instead of carrying it forward. The open questions are saved to
+``owner_questions.json``; the owner's rulings go to ``owner_rulings.json`` and the research resumes from its journal:
+finished work is reused, the rulings are applied, and every later agent reads them as settled facts.
+
 Every step is announced on an EventLog so the dashboard can show the office at work.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import traceback
@@ -29,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from aladeen.calllog import store as calllog
+from aladeen.dataflows.authority import owner_key
 from aladeen.dataflows.factpack import FactPack, build_factpack
 from aladeen.dataflows.symbols import normalize
 from aladeen.firm import context as cx
@@ -40,6 +47,83 @@ from aladeen.llm import LangChainRunner, Runner
 from aladeen.quant import audit as audit_mod
 from aladeen.quant import charts
 from aladeen.quant.engine import compute_quant, value_company
+
+QUESTIONS_FILE = "owner_questions.json"
+RULINGS_FILE = "owner_rulings.json"
+
+
+class OwnerHold(Exception):  # noqa: N818 - a pause, not a failure
+    """The research waits for the firm owner to settle conflicting evidence."""
+
+    def __init__(self, stage: str, questions: list[dict]):
+        super().__init__(f"{len(questions)} conflict(s) need the firm owner's ruling")
+        self.stage, self.questions = stage, questions
+
+
+def question_id(kind: str, text: str) -> str:
+    """Stable across a resume: the replayed answers raise the same conflicts in the same words."""
+    return "q-" + hashlib.sha256(f"{kind}:{text}".encode()).hexdigest()[:12]
+
+
+def data_question(record: dict) -> dict:
+    text = f'{record["period"]} {record["scope"]} {record["metric"]}'
+    return {"id": question_id("data", text), "kind": "data", "text": text, "key": owner_key(record),
+            "metric": record["metric"], "period": record["period"], "scope": record["scope"],
+            "unit": record["unit"], "feeds": record.get("feeds", {}),
+            "evidence": [{k: e.get(k) for k in ("title", "url", "page", "value", "line")}
+                         for e in record.get("evidence", [])][:6]}
+
+
+def conflict_question(text: str, raised_by: str) -> dict:
+    return {"id": question_id("conflict", text), "kind": "conflict", "text": text, "raised_by": raised_by}
+
+
+def open_questions(out_dir: str | Path) -> dict | None:
+    """The questions a held research is waiting on, with the desk work behind them, or None."""
+    p = Path(out_dir) / QUESTIONS_FILE
+    return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
+
+
+def record_rulings(out_dir: str | Path, answers: dict[str, dict], publish_draft: bool = False) -> dict:
+    """Check the owner's answers against the open questions and add them to the research's rulings.
+
+    ``answers`` maps a question id to ``{"ruling": text, "value": number}``. A conflict needs a ruling in words; a
+    data question needs the figure to use (the ruling is the note on where it comes from). With ``publish_draft``
+    the owner declines to rule: the research publishes the desk work as a draft, as before, and logs no call."""
+    held = open_questions(out_dir)
+    if not held:
+        raise ValueError("This research is not waiting for a ruling")
+    by_id = {q["id"]: q for q in held["questions"]}
+    unknown = set(answers) - set(by_id)
+    if unknown:
+        raise ValueError("Unknown question: " + ", ".join(sorted(unknown)))
+    p = Path(out_dir) / RULINGS_FILE
+    saved = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+    rulings = saved.setdefault("rulings", {})
+    missing = []
+    for qid, q in by_id.items():
+        a = answers.get(qid) or {}
+        text = str(a.get("ruling") or "").strip()[:2000]
+        value = a.get("value")
+        if value is not None and value != "":
+            try:
+                value = float(value)
+            except (TypeError, ValueError) as e:
+                raise ValueError(f"{q['text']}: the figure must be a number") from e
+            if value != value or value in (float("inf"), float("-inf")):
+                raise ValueError(f"{q['text']}: the figure must be a number")
+        else:
+            value = None
+        if (q["kind"] == "data" and value is None) or (q["kind"] == "conflict" and not text):
+            missing.append(q["text"])
+            continue
+        rulings[qid] = {"kind": q["kind"], "question": q["text"], "ruling": text, "value": value,
+                        "unit": q.get("unit"), "at": time.time()}
+    if missing and not publish_draft:
+        raise ValueError("Rule on every open question first: " + "; ".join(_short(m, 120) for m in missing))
+    saved["publish_draft"] = bool(publish_draft)
+    p.write_text(json.dumps(saved, indent=2), encoding="utf-8")
+    return saved
 
 
 def _short(text: str, n: int = 220) -> str:
@@ -72,14 +156,14 @@ class ResearchRun:
         self.resume = resume
         self.out_dir = out_dir
         if out_dir and not resume:
-            for name in (JOURNAL_FILE, "prior_calls.json"):
+            for name in (JOURNAL_FILE, "prior_calls.json", QUESTIONS_FILE, RULINGS_FILE):
                 (Path(out_dir) / name).unlink(missing_ok=True)
         self._inner = runner or LangChainRunner(cfg)
         self.runner = JournalRunner(self._inner, Path(out_dir) / JOURNAL_FILE) if out_dir else self._inner
         self.ev = events or EventLog()
         self.factpack_loader = factpack_loader
         self.state: dict[str, Any] = {"ticker": ticker, "as_of": self.as_of.isoformat(), "errors": [],
-                                      "audit": {}, "revisions": []}
+                                      "audit": {}, "revisions": [], "owner_rulings": [], "rulings_md": ""}
 
     # ------------------------------------------------------------------ helpers
     def _work(self, agent: str, task: str) -> None:
@@ -91,7 +175,8 @@ class ResearchRun:
     def _known(self) -> list[float]:
         s = self.state
         fp, q = s["fp"], s["quant"]
-        texts = [cx.full_fact_sheet(fp, q), s.get("debate_material", ""), *s.get("materials", {}).values(),
+        texts = [cx.full_fact_sheet(fp, q), s.get("debate_material", ""), s.get("rulings_md", ""),
+                 *s.get("materials", {}).values(),
                  *(d.get("text", "") for d in fp.documents)]
         extra: list[float] = []
         v = s.get("valuation")
@@ -165,9 +250,13 @@ class ResearchRun:
         if not (self.resume and p and p.exists()):
             return None
         try:
-            return FactPack.load(p)
+            fp = FactPack.load(p)
         except (ValueError, TypeError, KeyError):
             return None  # unreadable: collect the data again
+        if fp.owner_facts:  # a published copy: replay with the data as first collected, rulings come later
+            fp.owner_facts = {}
+            fp.resolve_facts()
+        return fp
 
     def _save_factpack(self, fp: FactPack) -> None:
         p = self._saved_path("factpack.json")
@@ -277,7 +366,8 @@ class ResearchRun:
         s = self.state
         try:
             a = staff.valuation_analyst(self.runner, self.cfg, s["fp"], s["quant"], s["memos"], s["mandate"],
-                                        challenge=challenge, previous=s.get("assumptions"))
+                                        challenge=challenge, previous=s.get("assumptions"),
+                                        rulings=s.get("rulings_md", ""))
         except Exception as e:  # noqa: BLE001 - fall back to defaults, but say so
             msg = f"Valuation analyst failed ({type(e).__name__}: {e}); history-based default assumptions used."
             a = ValuationAssumptions(rationale=msg)
@@ -330,10 +420,11 @@ class ResearchRun:
     def _set_debate_material(self) -> None:
         s = self.state
         prior = calllog.prior_calls_md(s["prior_calls"])
+        rulings = s.get("rulings_md", "")
         s["debate_material_open"] = staff.debate_material(s["fp"], s["quant"], None, s["memos"],
-                                                          s["desk_review"].synthesis, prior)
+                                                          s["desk_review"].synthesis, prior, rulings)
         s["debate_material"] = staff.debate_material(s["fp"], s["quant"], s["valuation"], s["memos"],
-                                                     s["desk_review"].synthesis, prior)
+                                                     s["desk_review"].synthesis, prior, rulings)
 
     def _debate(self) -> None:
         self.ev.phase("debate")
@@ -467,12 +558,15 @@ class ResearchRun:
         self._work("cio", "Deciding which desks must close the council's gaps")
         notes = ("## The independent council found these gaps. Send a desk back only if its memo must change "
                  "to close a gap; accept the rest.\n" + "\n".join(f"- {g}" for g in gaps))
+        if s.get("rulings_md"):
+            notes += "\n\n" + s["rulings_md"]
         review = staff.cio_review(self.runner, self.cfg, s["mandate"], s["memos"], notes)
         if review.unresolved_material_conflicts:
-            s["evidence_gaps"].extend(review.unresolved_material_conflicts)
-            self.ev.log("cio", "Decision held for primary evidence: " + "; ".join(review.unresolved_material_conflicts))
-            self.ev.phase("followup", "done")
-            return
+            self._settle("followup", review.unresolved_material_conflicts, "cio")  # holds for the owner
+            if s["evidence_gaps"]:
+                self.ev.log("cio", "Decision held for primary evidence: " + "; ".join(s["evidence_gaps"]))
+                self.ev.phase("followup", "done")
+                return
         to_revise = [r for r in review.reviews if r.verdict == "revise" and r.desk in s["memos"]]
         if not to_revise:
             self.ev.log("cio", "No desk memo needs to change for the council's gaps; they are disclosed in the report.")
@@ -510,7 +604,11 @@ class ResearchRun:
         s = self.state
         cv = (s.get("council") or {}).get("verdict") or {}
         incomplete = bool(cv) and not cv.get("report_complete", True)
-        gaps = s["evidence_gaps"] + (cv.get("unresolved_material_conflicts") or [])
+        council_conflicts = cv.get("unresolved_material_conflicts") or []
+        if council_conflicts and not s["evidence_gaps"]:
+            self._settle("council", council_conflicts, "council")  # holds for the owner; else what is left
+            council_conflicts = []
+        gaps = s["evidence_gaps"] + council_conflicts
         s["report_status"] = "final"
         if gaps:
             s.update(report_status="draft", draft_reason="Verify against the primary documentation: " + "; ".join(gaps))
@@ -522,6 +620,68 @@ class ResearchRun:
                 s.update(decision_pending=True, final={"rating": None, "headline": "Awaiting evidence review"},
                          valuation={"target_price": None, "upside": None, "cmp": s["quant"]["market"]["cmp"]})
             self.ev.log("cio", "Report held as a DRAFT: " + _short(s["draft_reason"], 300))
+
+    # ------------------------------------------------------------------ the firm owner's rulings
+    def _load_rulings(self) -> dict:
+        p = self._saved_path(RULINGS_FILE)
+        if not (p and p.exists()):
+            return {}
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            return {}
+
+    def _settle(self, stage: str, conflicts: list[str], raised_by: str) -> None:
+        """Apply the owner's rulings, then hold the research if a decision-changing conflict is still open.
+
+        Data rulings put the owner's figure into the fact pack, so the engine can value the company. Every ruling,
+        from this hold or an earlier one, is given to the agents from the valuation onward as a settled fact. With
+        nothing ruled the agents' questions are unchanged, so a resumed research replays its saved answers."""
+        s, saved = self.state, self._load_rulings()
+        rulings = saved.get("rulings") or {}
+        fp = s["fp"]
+        figures = {}
+        for record in s["quant"]["valuation_blockers"]:
+            q, ruling = data_question(record), rulings.get(data_question(record)["id"])
+            if ruling and ruling.get("value") is not None and q["key"] not in fp.owner_facts:
+                figures[q["key"]] = {"value": ruling["value"], "note": ruling.get("ruling") or ""}
+        if figures:
+            fp.owner_facts.update(figures)
+            s["quant"] = compute_quant(fp, self.cfg)
+            s["data_caveats"] = data_caveats(fp, s["quant"])
+            self.ev.log("data", "The firm owner's figures are in the fact pack: " + "; ".join(
+                f"{k.replace('|', ' ')} = {v['value']:g}" for k, v in figures.items()))
+        s["owner_rulings"] = [{"id": k, **r} for k, r in rulings.items()]
+        s["rulings_md"] = staff.rulings_md(s["owner_rulings"])
+        questions = [data_question(r) for r in s["quant"]["valuation_blockers"]]
+        questions += [conflict_question(c, raised_by) for c in conflicts]
+        open_ = [q for q in questions if q["id"] not in rulings]
+        settled = len(questions) - len(open_)
+        if settled:
+            self.ev.log("cio", f"{settled} conflict(s) settled by the firm owner; the research continues on those rulings.")
+        s["evidence_gaps"] = [q["text"] for q in open_]
+        if open_ and self.out_dir and self.cfg.get("hold_for_owner", True) and not saved.get("publish_draft"):
+            raise OwnerHold(stage, open_)
+
+    def _hold(self, h: OwnerHold) -> None:
+        """Save the open questions and stop. The research resumes when the owner has ruled on every one."""
+        s = self.state
+        review = s.get("desk_review")
+        s["held"] = {"stage": h.stage, "questions": h.questions}
+        self._save_json(QUESTIONS_FILE, {
+            "stage": h.stage, "asked_at": time.time(), "questions": h.questions,
+            "synthesis": getattr(review, "synthesis", ""), "memos": s.get("memos", {})})
+        try:  # the working papers so far, so the owner can read the desk work behind each conflict
+            from aladeen.report.render import transcript_md
+            Path(self.out_dir, "transcript.md").write_text(transcript_md(s), encoding="utf-8")
+        except Exception as e:  # noqa: BLE001 - the questions matter more than the transcript
+            s["errors"].append(f"Working papers not written at the hold: {e}")
+        for q in h.questions:
+            self.ev.message("cio", "owner", "Please rule: " + _short(q["text"], 300))
+        self._work("cio", "Waiting for the firm owner to settle the conflicting evidence")
+        self.ev.emit("hold", stage=h.stage, questions=h.questions,
+                     text=f"Research paused: {len(h.questions)} conflict(s) need your ruling before the "
+                          f"{'valuation' if h.stage == 'review' else 'decision'} goes ahead.")
 
     def _publish(self) -> None:
         from aladeen.report.render import log_call, save_outputs
@@ -565,8 +725,10 @@ class ResearchRun:
                 self.ev.log("cio", f"Continuing the earlier research: {self.runner.restored} finished AI answers "
                                    "are reused, so the firm picks up where it stopped.")
             for step in steps:
-                if step == self._valuation and self.state["evidence_gaps"]:
-                    break
+                if step == self._valuation:
+                    self._settle("review", self.state["desk_review"].unresolved_material_conflicts, "cio")
+                    if self.state["evidence_gaps"]:
+                        break  # holding is off: the desk work is published as a draft
                 step()
             if not self.state["evidence_gaps"]:
                 prior_band = (self.cfg.get("review_baseline") or {}).get("band_rating")
@@ -576,6 +738,9 @@ class ResearchRun:
                     self._followup()
             self._status()
             self._publish()
+        except OwnerHold as h:
+            self._hold(h)
+            return self.state
         except Exception as e:
             self.state["error"] = f"{type(e).__name__}: {e}"
             self.ev.emit("error", text=self.state["error"], detail=traceback.format_exc()[-2000:])
@@ -610,6 +775,8 @@ def report_summary_md(s: dict) -> str:
         cx.reconciliation_md(s["quant"]),
         cx.warnings_md(fp, [*s.get("data_caveats", []), *v.get("warnings", [])]),
     ]
+    if s.get("rulings_md"):
+        lines.append(s["rulings_md"])
     flagged = {k: x for k, x in s.get("audit", {}).items() if x}
     if flagged:
         lines.append("## Number audit flags\n" + "\n".join(f"- {k}: {', '.join(x[:10])}" for k, x in flagged.items()))

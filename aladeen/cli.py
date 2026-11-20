@@ -1,6 +1,6 @@
 """Command line: ``aladeen TCS`` opens the dashboard and starts the research.
 
-Other commands: ``dashboard``, ``demo``, ``retry``, ``data``, ``value``, ``track``, ``calls``, ``score``, ``config``.
+Other commands: ``dashboard``, ``demo``, ``retry``, ``resolve``, ``data``, ``value``, ``track``, ``calls``, ``score``, ``config``.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ BANNER = (f"[bold #3730a3]AlaDeen Capital Research[/] v{__version__}\n"
           "[dim]An AI research firm for Indian listed companies, led by an AI Chief Investment Officer.\n"
           "Research only — not investment advice.[/]")
 
-COMMANDS = {"research", "retry", "dashboard", "demo", "data", "value", "track", "calls", "score", "config"}
+COMMANDS = {"research", "retry", "resolve", "dashboard", "demo", "data", "value", "track", "calls", "score", "config"}
 
 
 def _date(s: str | None) -> date:
@@ -114,6 +114,8 @@ def _print_event(e: dict) -> None:
         console.print(f"  [dim]{TITLES.get(e.get('agent'), e.get('agent'))}: {e.get('text', '')}[/]")
     elif t == "error":
         console.print(f"\n[bold red]Research stopped: {e.get('text')}[/]")
+    elif t == "hold":
+        console.print(f"\n[bold #b7791f]{e.get('text')}[/]")
 
 
 def _follow(port: int, run_id: str) -> dict:
@@ -141,6 +143,13 @@ def _follow(port: int, run_id: str) -> dict:
 
 
 def _summary(rec: dict, url: str | None) -> None:
+    if rec.get("status") == "awaiting":
+        where = f"Rule on them in the dashboard ({url}) or here: " if url else "Rule on them here: "
+        console.print(Panel(f"[bold]{rec.get('headline') or 'Paused for your ruling'}[/]\n\nThe firm will not value "
+                            "the company or sign a call on conflicting evidence.\n"
+                            f"{where}[bold]aladeen resolve {rec['id']}[/]",
+                            title="Research paused", border_style="#b7791f"))
+        return
     if rec.get("status") != "done":
         again = (f"\n\n[bold]Continue the same research (finished work is kept):[/] aladeen retry {rec['id']}"
                  if rec.get("id") else "")
@@ -285,6 +294,97 @@ def retry(
     _open(url, browser)
     if not quiet:
         _summary(_follow(port, run_id), url)
+    _hold(started, port)
+
+
+def _ask_rulings(hold: dict) -> tuple[dict, bool]:
+    """Ask the owner, in the terminal, to rule on each open question."""
+    questions = hold["questions"]
+    console.print(f"[bold]{len(questions)} conflict(s) paused this research.[/] Rule on each one, or type "
+                  "[bold]draft[/] at any prompt to publish the desk work as a draft with no call.\n")
+    rulings: dict[str, dict] = {}
+    for i, q in enumerate(questions, 1):
+        console.print(f"[bold #b7791f]{i}. {q['text']}[/]")
+        if q["kind"] == "data":
+            feeds = ", ".join(f"{k} {v:g}" for k, v in (q.get("feeds") or {}).items())
+            console.print(f"   Vendor readings ({q['unit']}): {feeds or 'none'}")
+            for e in q.get("evidence") or []:
+                console.print(f"   Filed: {e.get('title')} p.{e.get('page')}: {e.get('line')}")
+            while True:
+                raw = typer.prompt(f"   Figure to use ({q['unit']})").strip()
+                if raw.lower() == "draft":
+                    return rulings, True
+                try:
+                    value = float(raw.replace(",", ""))
+                    break
+                except ValueError:
+                    console.print("   [red]Enter a number, e.g. 2150.5[/]")
+            note = typer.prompt("   Where is it from (document and page)", default="", show_default=False)
+            rulings[q["id"]] = {"value": value, "ruling": note}
+        else:
+            text = typer.prompt("   Your ruling (which claim is right, and the evidence)").strip()
+            if text.lower() == "draft":
+                return rulings, True
+            rulings[q["id"]] = {"ruling": text}
+    return rulings, False
+
+
+def _paused_id(run_id: str | None, runs: list[dict]) -> str:
+    if run_id:
+        return run_id
+    paused = [r for r in runs if r.get("status") == "awaiting"]
+    if not paused:
+        console.print("[yellow]No research is waiting for your ruling.[/]")
+        raise typer.Exit(1)
+    return paused[0]["id"]
+
+
+@app.command()
+def resolve(
+    run_id: str | None = typer.Argument(None, help="Research id (default: the latest paused research)"),
+    port: int | None = typer.Option(None, help="Dashboard port (default from Settings, 8765)"),
+    browser: bool | None = typer.Option(None, "--browser/--no-browser", help="Open the dashboard in a browser"),
+    headless: bool = typer.Option(False, "--headless", help="No dashboard: run in this terminal only"),
+):
+    """Rule on the conflicts that paused a research, then let the firm carry on from where it stopped."""
+    console.print(Panel(BANNER, border_style="#6366f1"))
+    if headless:
+        from aladeen.firm.orchestrator import open_questions
+        from aladeen.server.runs import RunManager
+
+        mgr = RunManager()
+        run_id = _paused_id(run_id, mgr.store.list())
+        rec = mgr.store.get(run_id)
+        if not rec or rec["status"] != "awaiting":
+            console.print("[red]This research is not waiting for your ruling.[/]")
+            raise typer.Exit(2)
+        rulings, draft = _ask_rulings(open_questions(rec["out_dir"]))
+        try:
+            mgr.resolve(run_id, rulings, publish_draft=draft)
+        except (KeyError, ValueError) as e:
+            console.print(f"[red]{e}[/]")
+            raise typer.Exit(2) from e
+        _headless_follow(mgr, run_id)
+        return
+    cfg = _cfg()
+    port = port or cfg["port"]
+    browser = cfg["open_browser"] if browser is None else browser
+    started = _ensure_dashboard(port, cfg["host"])
+    http = _http()
+    run_id = _paused_id(run_id, http.get(_base(port) + "/api/runs", timeout=30).json())
+    rec = http.get(f"{_base(port)}/api/runs/{run_id}", timeout=30).json()
+    if rec.get("status") != "awaiting":
+        console.print("[red]This research is not waiting for your ruling.[/]")
+        raise typer.Exit(2)
+    rulings, draft = _ask_rulings(rec["hold"])
+    r = http.post(f"{_base(port)}/api/runs/{run_id}/resolve", json={"rulings": rulings, "publish_draft": draft},
+                  timeout=30)
+    if not r.ok:
+        console.print(f"[red]{r.json().get('detail', r.text)}[/]")
+        raise typer.Exit(2)
+    url = f"{_base(port)}/#/run/{run_id}"
+    _open(url, browser)
+    _summary(_follow(port, run_id), url)
     _hold(started, port)
 
 

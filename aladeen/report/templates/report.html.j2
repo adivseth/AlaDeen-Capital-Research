@@ -85,6 +85,7 @@ img.chart{width:100%;border:1px solid var(--line);border-radius:10px;margin:8px 
 <body>
 <div class="page">
 {% if report_status == 'draft' %}<div class="demo-banner">DRAFT — not a final call. {{ draft_reason }} This call has not been filed in the call log.</div>{% endif %}
+{% if owner_rulings %}<div class="demo-banner" style="background:#e8f4ff;border-color:#9cc7ef;color:#123a5c">This research was paused on conflicting evidence and resumed on the firm owner's rulings:<ul style="margin:6px 0 0">{% for r in owner_rulings %}<li>{{ r.question }} — {{ r.ruling or 'Figure set by the owner.' }}{% if r.value is not none %} ({{ r.value }} {{ r.unit or '' }}){% endif %}</li>{% endfor %}</ul></div>{% endif %}
 {% if synthetic %}<div class="demo-banner">DEMO REPORT — synthetic company and offline agents. No real security is described and no AI model was called.</div>{% endif %}
 
 <div class="topbar">

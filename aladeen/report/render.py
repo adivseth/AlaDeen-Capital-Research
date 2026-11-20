@@ -234,6 +234,7 @@ def build_context(state: dict, cfg: dict) -> dict[str, Any]:
         "warnings": list(dict.fromkeys(state.get("data_caveats", fp.warnings) + v.get("warnings", []))),
         "report_status": state.get("report_status", "final"),
         "draft_reason": state.get("draft_reason", ""),
+        "owner_rulings": state.get("owner_rulings", []),
         "valuation_revisions": state.get("valuation_revisions", []),
         "sources": [s for s in fp.sources if s.get("url")],
         "prior_calls": state.get("prior_calls", []),
@@ -305,6 +306,16 @@ def transcript_md(state: dict) -> str:
         out += ["## CIO review of the memos", "| Desk | Verdict | Notes |", "|---|---|---|",
                 *[f"| {TITLES.get(x['desk'], x['desk'])} | {x['verdict'].title()} | {x['notes']} |"
                   for x in r.get("reviews", [])], "", f"**Synthesis:** {r.get('synthesis', '')}", ""]
+    if state.get("owner_rulings"):
+        out += ["## The firm owner's rulings on conflicting evidence"]
+        for r in state["owner_rulings"]:
+            fig = f" Figure: {r['value']:g} {r.get('unit') or ''}".rstrip() if r.get("value") is not None else ""
+            out += [f"- **{r['question']}** — {r.get('ruling') or 'Figure set by the owner.'}{fig}"]
+        out += [""]
+    held = state.get("held")
+    if held:
+        out += ["## Paused for the firm owner", "The research is waiting for rulings on:",
+                *_bullets(q["text"] for q in held["questions"]), ""]
     for rv in state.get("revisions", []):
         out += [f"## Revision request — {TITLES.get(rv['desk'], rv['desk'])} (round {rv['round']})", rv["notes"], ""]
     out += ["## Valuation assumptions", *_assumptions_md(state.get("assumptions") or {}), ""]
@@ -359,7 +370,7 @@ def transcript_md(state: dict) -> str:
 def _jsonable(state: dict) -> dict:
     keep = ["ticker", "as_of", "memos", "revisions", "assumptions", "debate", "final", "rating_check", "council",
             "audit", "errors", "prior_calls", "call_id", "valuation_revisions"]
-    out = {k: state.get(k) for k in keep + ["report_status", "draft_reason", "decision_pending"]}
+    out = {k: state.get(k) for k in keep + ["report_status", "draft_reason", "decision_pending", "owner_rulings"]}
     out["fact_resolutions"] = state["fp"].fact_resolutions
     for k in ("mandate", "desk_review", "debate_verdict", "risk_review"):
         out[k] = _plain(state.get(k))

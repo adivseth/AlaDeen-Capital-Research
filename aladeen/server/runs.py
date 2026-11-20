@@ -12,7 +12,7 @@ from pathlib import Path
 from aladeen.config import load_config
 from aladeen.dataflows.symbols import normalize, safe_component
 from aladeen.firm.events import EventLog
-from aladeen.firm.orchestrator import ResearchRun
+from aladeen.firm.orchestrator import ResearchRun, record_rulings
 from aladeen.server.store import Store
 
 
@@ -66,6 +66,23 @@ class RunManager:
                     Path(rec["out_dir"]), ev, resume=True)
         return run_id
 
+    def resolve(self, run_id: str, rulings: dict[str, dict], publish_draft: bool = False) -> str:
+        """Record the owner's rulings on a paused research and continue it. Finished work is reused; the agents
+        from the valuation onward read the rulings as settled facts."""
+        with self._lock:
+            rec = self.store.get(run_id)
+            if not rec:
+                raise KeyError(run_id)
+            if rec["status"] != "awaiting":
+                raise ValueError("This research is not waiting for your ruling")
+            record_rulings(rec["out_dir"], rulings, publish_draft=publish_draft)  # ValueError: nothing changes
+            self.store.update(run_id, status="running", error=None, finished_at=None, seconds=None, headline=None)
+            ev = EventLog()
+            self.live[run_id] = ev
+        self._spawn(run_id, self.config(), rec["ticker"], date.fromisoformat(rec["as_of"]), bool(rec["demo"]),
+                    Path(rec["out_dir"]), ev, resume=True)
+        return run_id
+
     def _spawn(self, run_id, cfg, ticker, day, demo, out_dir: Path, ev: EventLog, resume: bool = False) -> None:
         threading.Thread(target=self._run, args=(run_id, cfg, ticker, day, demo, out_dir, ev, resume), daemon=True,
                          name=f"research-{run_id}").start()
@@ -94,6 +111,12 @@ class RunManager:
                     cfg.update(run_council=False, max_debate_rounds=0)
                 cfg["research_brief"] += "\nReview the prior thesis against the updated filings. Prior report: " + review["thesis"]
             state = ResearchRun(cfg, ticker, day, events=ev, out_dir=out_dir, resume=resume, **kw).run()
+            if state.get("held"):
+                n = len(state["held"]["questions"])
+                self.store.update(run_id, status="awaiting", finished_at=time.time(), company=state["fp"].name,
+                                  headline=f"Paused: {n} conflict{'s need' if n != 1 else ' needs'} your ruling",
+                                  cmp=state["quant"]["market"]["cmp"], seconds=round(time.time() - t0, 1))
+                return
             f, v = state["final"], state["valuation"]
             cv = (state.get("council") or {}).get("verdict") or {}
             self.store.update(run_id, status="done", finished_at=time.time(), company=state["fp"].name,

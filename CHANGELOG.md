@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Conflicting evidence pauses the research for your ruling.** A decision-changing conflict (vendor revenue or PAT
+  the filings cannot settle, or contradictory claims raised by the CIO or the council) no longer skips straight to a
+  draft. The run pauses with the new status *Needs your ruling*; the run page lists each conflict with a form (pick or
+  type the figure and its source, or write which claim is right). Submitting resumes the same research: finished work
+  is reused, owner figures go into the fact pack, and the valuation, debate, risk office, decision and council read the
+  rulings as settled facts. Rulings are shown in the report and saved in `research.json`. *Publish as draft instead*
+  keeps the old behaviour. New: `aladeen resolve [RUN_ID]`, `POST /api/runs/{id}/resolve`, setting `hold_for_owner`
+  (on by default).
 - **Try again for failed research.** A stopped research can be continued under the same id from the run page,
   the archive or `aladeen retry [RUN_ID]`. Each AI answer is journaled (`journal.jsonl`) and the fact pack is frozen,
   so the retry reuses all finished work and runs only what is left. Works after a closed dashboard and after

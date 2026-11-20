@@ -3,7 +3,7 @@
 <table><thead><tr><th>Annual fact</th><th>Vendor readings</th><th>Research value</th><th>Filed evidence</th></tr></thead><tbody>
 {% for f in fp.fact_resolutions %}<tr><td>{{ f.period }} · {{ f.scope }} · {{ f.metric }} ({{ f.unit }})</td>
 <td>{% for name, value in f.feeds.items() %}{{ name }} {{ value }} {% endfor %}</td>
-<td>{{ f.value if f.status == 'verified' else 'Pending verification' }}</td>
+<td>{% if f.status == 'verified' %}{{ f.value }}{% elif f.status == 'owner' %}{{ f.value }} (set by the firm owner{% if f.owner_note %}: {{ f.owner_note }}{% endif %}){% else %}Pending verification{% endif %}</td>
 <td>{% for e in f.evidence %}<a href="{{ e.url }}#page={{ e.page }}">{{ e.title }}, PDF p.{{ e.page }}</a> · {{ e.line }} {% endfor %}</td></tr>{% endfor %}
 </tbody></table></details>
 {% endif %}

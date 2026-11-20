@@ -76,7 +76,7 @@ def test_payout_narrative_is_a_lead_only(cfg):
 def test_unresolved_run_publishes_independent_work_without_a_call(cfg, tmp_path):
     runner = demo_runner()
     fp = disputed()
-    cfg.update(run_council=False, block_incomplete_reports=False)
+    cfg.update(run_council=False, block_incomplete_reports=False, hold_for_owner=False)
     state = ResearchRun(cfg, "DEMO", DEMO_DATE, runner=runner, factpack_loader=lambda *_: fp, out_dir=tmp_path).run()
     assert state["memos"] and state["report_status"] == "draft" and not state.get("call_id")
     assert "valuation" not in [c["agent"] for c in runner.calls]
@@ -97,7 +97,7 @@ def test_desk_identified_conflict_blocks_call_without_council(cfg, tmp_path):
             response.unresolved_material_conflicts = ["Obtain the exchange order to verify the suspension date."]
         return response
 
-    cfg.update(run_council=False, block_incomplete_reports=False)
+    cfg.update(run_council=False, block_incomplete_reports=False, hold_for_owner=False)
     state = ResearchRun(cfg, "DEMO", DEMO_DATE, runner=OfflineRunner(responder),
                         factpack_loader=lambda *args: synthetic_factpack(), out_dir=tmp_path).run()
     assert state["final"]["rating"] is None and "exchange order" in state["draft_reason"]

@@ -52,6 +52,13 @@ dashboard draws the office from them; finished runs replay from `events.json`.
    `journal.jsonl` (keyed by agent, tier, prompts, schema and nth occurrence, not by model). The fact pack and prior
    calls are frozen on the first attempt, so a retry builds identical prompts, replays finished answers and asks the
    AI only for what is missing. Failed calls are never stored.
+6. **Conflicts wait for the owner.** `ResearchRun._settle` runs before the valuation, after the council follow-up
+   and before publication. An open conflict (an unresolved annual fact or an `unresolved_material_conflicts` entry)
+   raises `OwnerHold`. The run writes `owner_questions.json` and stops with the status `awaiting`.
+   `record_rulings` checks the owner's answers into `owner_rulings.json`. The resume replays the journal, puts
+   owner figures into `FactPack.owner_facts` (status `owner` in `fact_resolutions`) and passes `staff.rulings_md`
+   to the valuation analyst, the debate material and the council summary. Without rulings those prompts are
+   unchanged, so earlier journals still replay.
 
 ## Extending
 

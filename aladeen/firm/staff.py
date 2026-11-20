@@ -112,6 +112,20 @@ def brief_md(cfg: dict) -> str:
     return f"## The firm owner's standing research brief\n{b}" if b else ""
 
 
+def rulings_md(rulings: list[dict]) -> str:
+    """The firm owner's rulings on the conflicts that held the research. Empty when there are none, so a research
+    without a hold asks every agent exactly the same questions as before."""
+    if not rulings:
+        return ""
+    lines = ["## The firm owner's rulings on conflicting evidence",
+             "The research was paused on these conflicts and the firm owner settled them. Treat each ruling as the "
+             "settled fact; do not reopen it. Where a desk memo says otherwise, the ruling prevails."]
+    for r in rulings:
+        value = f" Figure to use: {r['value']:g} {r.get('unit') or ''}.".rstrip() if r.get("value") is not None else ""
+        lines.append(f"- Conflict: {r['question']}\n  Ruling: {r.get('ruling') or 'Use the figure below.'}{value}")
+    return "\n".join(lines)
+
+
 def cio_mandate(runner: Runner, cfg: dict, fp: FactPack, q: dict, prior_md: str) -> ResearchMandate:
     desks = ", ".join(f"{d} ({TITLES[d]})" for d in cfg["desks"])
     user = "\n\n".join([cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 5), cx.reconciliation_md(q),
@@ -193,7 +207,7 @@ def cost_of_capital_md(q: dict, cfg: dict) -> str:
 
 def valuation_analyst(runner: Runner, cfg: dict, fp: FactPack, q: dict, memos: dict[str, str],
                       mandate: ResearchMandate, challenge: str | None = None,
-                      previous: dict | None = None) -> ValuationAssumptions:
+                      previous: dict | None = None, rulings: str = "") -> ValuationAssumptions:
     defaults = json.dumps(default_assumptions(q, cfg), default=str)
     parts = [
         "## CIO's key questions\n" + "\n".join(f"- {x}" for x in mandate.key_questions),
@@ -203,6 +217,8 @@ def valuation_analyst(runner: Runner, cfg: dict, fp: FactPack, q: dict, memos: d
         memos_md(memos, tuple(cfg["desks"]) if cfg.get("review_baseline") else ("fundamentals", "business", "filings")),
         cx.warnings_md(fp),
     ]
+    if rulings:
+        parts.append(rulings)
     if challenge:
         parts.append(f"## Your previous assumptions\n{json.dumps(previous or {}, default=str)}\n\n"
                      f"## Challenge to the valuation\n{challenge}\n\nRevise the assumptions where the evidence "
@@ -212,13 +228,16 @@ def valuation_analyst(runner: Runner, cfg: dict, fp: FactPack, q: dict, memos: d
 
 
 def debate_material(fp: FactPack, q: dict, valuation: dict | None, memos: dict[str, str], synthesis: str,
-                    prior_md: str) -> str:
+                    prior_md: str, rulings: str = "") -> str:
     """With ``valuation=None`` this is the material for the opening cases: the advocates argue the business
     first, so the engine's number does not anchor them. Rebuttals and the CIO's ruling see the valuation."""
     parts = [cx.company_md(fp), cx.market_md(q), cx.financials_md(q, 6)]
     if valuation is not None:
         parts.append(cx.valuation_md(valuation))
-    return "\n\n".join(parts + [f"## CIO synthesis of the desk work\n{synthesis}", memos_md(memos), prior_md])
+    parts.append(f"## CIO synthesis of the desk work\n{synthesis}")
+    if rulings:
+        parts.append(rulings)
+    return "\n\n".join(parts + [memos_md(memos), prior_md])
 
 
 def debate_turn(side: str, runner: Runner, cfg: dict, material: str, history: list[dict], round_no: int) -> str:

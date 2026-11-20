@@ -363,3 +363,32 @@ table.t th.num,table.t td.num{text-align:right;font-family:var(--mono);font-vari
 .chat-thread details{margin:.35rem 0;color:var(--tx2)}
 .chat-thread summary{cursor:pointer}
 .research-chat form{margin-top:1.25rem}
+
+/* ------------------------------------------------------------------ paused for the owner's ruling */
+.status.awaiting{color:var(--gold)} .status.awaiting .lamp{animation:ping 1.6s ease-out infinite}
+.stamp.ASK{color:var(--gold);background:var(--hold-bg)}
+.kpi.ask::before{background:var(--gold)} .kpi.ask b{color:var(--gold)}
+.lrow .why.ask{color:var(--gold)}
+.btn.ask{border-color:rgba(226,182,92,.55);color:var(--gold)}
+.btn.ask:hover{background:var(--hold-bg)}
+.holdbox{border:1px solid rgba(226,182,92,.5);border-radius:var(--r2);background:var(--s1);box-shadow:var(--shadow);padding:22px 24px;margin-bottom:22px}
+.hold-head{display:flex;gap:20px;align-items:flex-start}
+.hold-head h3{margin:2px 0 6px;font:600 19px/1.35 var(--head);color:var(--tx)}
+.hold-head p{margin:0;max-width:820px;color:var(--tx2);font-size:14.5px;line-height:1.55}
+.qctx{margin:16px 0 0;color:var(--tx2);font-size:14px}
+.qctx summary{cursor:pointer;color:var(--cyan);font-weight:600}
+.qctx p{margin:10px 0;line-height:1.55;max-width:900px}
+#holdform fieldset.q{border:1px solid var(--line2);border-radius:var(--r);margin:16px 0 0;padding:14px 16px 4px;background:var(--bg2);min-width:0}
+#holdform fieldset.q.bad{border-color:var(--sell)}
+.q .qn{font:600 11px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+.q .qt{margin:8px 0 12px;font:500 15.5px/1.5 var(--sans);color:var(--tx)}
+.q .qmeta{color:var(--mut);font-size:13px;margin-bottom:8px}
+.q .qev{margin:0 0 10px;padding-left:18px;font-size:13px;color:var(--tx2)}
+.q .picks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.q .picks .btn.on{border-color:var(--gold);color:var(--gold)}
+.q .row2{display:grid;grid-template-columns:minmax(160px,240px) 1fr;gap:12px}
+.q .field{margin-bottom:12px}
+.hold-acts{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}
+#holdmsg{color:var(--sell)}
+.wire li.hold{border-left-color:var(--gold);background:var(--hold-bg)} .wire li.hold .who{color:var(--gold)}
+@media (max-width:720px){.hold-head{flex-direction:column}.q .row2{grid-template-columns:1fr}}

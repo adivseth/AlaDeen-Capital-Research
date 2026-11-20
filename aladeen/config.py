@@ -113,6 +113,9 @@ Before finalising, assess whether complete and accurate research has been done. 
     "council_followup": True,
     "council_recheck": True,  # after a follow-up that changed memos, the council reviews once more
     "block_incomplete_reports": True,  # still incomplete after that: publish as a draft, do not log the call
+    # A decision-changing conflict pauses the research until the owner rules on it (dashboard or `aladeen resolve`).
+    # Off: the desk work is published as a draft at once and the call is not logged.
+    "hold_for_owner": True,
     "reality_check_revision": True,  # a target far from price and consensus goes back to the analyst once
     "cio_valuation_challenge": True,  # the CIO may dispute the valuation once before signing
     # Call IDs continue from this number when the local log is behind a shared sheet (e.g. 24 -> AC-025).
@@ -131,7 +134,8 @@ EDITABLE = [
     "blume_adjust_beta", "roll_forward_target", "reality_check_threshold", "tax_rate",
     "terminal_growth_cap", "dcf_weight", "scenario_probabilities", "scenario_multiple_factors",
     "margin_of_safety", "rating_bands", "firm_name", "analyst_name", "port", "open_browser",
-    "research_brief", "council_followup", "council_recheck", "block_incomplete_reports", "reality_check_revision",
+    "research_brief", "council_followup", "council_recheck", "block_incomplete_reports", "hold_for_owner",
+    "reality_check_revision",
     "cio_valuation_challenge", "call_id_floor", "filings_chars_per_document", "max_presentations",
     "max_announcements_read", "web_results", "web_text_chars",
 ]

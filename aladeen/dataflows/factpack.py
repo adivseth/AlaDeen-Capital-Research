@@ -47,9 +47,11 @@ class FactPack:
 
     captured_on: str | None = None
     fact_resolutions: list[dict] = field(default_factory=list)
+    # The firm owner's rulings on annual facts the filings could not settle, keyed by authority.owner_key.
+    owner_facts: dict[str, dict] = field(default_factory=dict)
 
     def resolve_facts(self) -> None:
-        self.fact_resolutions = authority.resolve(self)
+        self.fact_resolutions = authority.apply_owner_facts(authority.resolve(self), self.owner_facts)
 
     # ------------------------------------------------------------ helpers
     @property

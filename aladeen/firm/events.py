@@ -17,7 +17,7 @@ class EventLog:
         with self._cond:
             ev = {"seq": len(self._events), "ts": time.time(), "type": type_, **kw}
             self._events.append(ev)
-            if type_ in ("done", "error"):
+            if type_ in ("done", "error", "hold"):
                 self.closed = True
             self._cond.notify_all()
             return ev
